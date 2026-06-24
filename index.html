@@ -354,11 +354,60 @@
 (function() {
   // ---- CONFIG ----
   // Bump this string each time you upload a new version, so it's visible on the page.
-  var PLANNER_VERSION = "v1.1";
+  var PLANNER_VERSION = "v1.2";
   // Replace this with your real Formspree endpoint, e.g. "https://formspree.io/f/abcd1234"
   var FORMSPREE_ENDPOINT = "https://formspree.io/f/mbdvddvk";
 
   document.getElementById('version-tag').textContent = PLANNER_VERSION;
+
+  // Shared section headings used by buildSummary()'s output — used to split
+  // the plain-text summary into sections for both the PDF and the Formspree fields.
+  var KNOWN_HEADINGS = [
+    'ROOMS / ZONES', 'DEVICES', 'ANTENNA COVERAGE', 'BATTERIES & CHARGERS',
+    'USERS', 'GROUPS', 'PROGRAM AUDIO', 'RADIO INTEGRATION', 'MISC / INTERFACES', 'KIT LIST'
+  ];
+  // Maps a heading string to a short, email-friendly field key.
+  var HEADING_FIELD_KEYS = {
+    'ROOMS / ZONES': 'rooms',
+    'DEVICES': 'devices',
+    'ANTENNA COVERAGE': 'antenna_coverage',
+    'BATTERIES & CHARGERS': 'batteries_chargers',
+    'USERS': 'users',
+    'GROUPS': 'groups',
+    'PROGRAM AUDIO': 'program_audio',
+    'RADIO INTEGRATION': 'radio_integration',
+    'MISC / INTERFACES': 'misc_interfaces',
+    'KIT LIST': 'kit_list'
+  };
+
+  // Splits buildSummary()'s plain-text output into one string per section,
+  // keyed by the short field names in HEADING_FIELD_KEYS.
+  function splitSummaryIntoFields(raw) {
+    var fields = {};
+    var allLines = raw.split('\n');
+    var currentKey = null;
+    var currentBody = [];
+
+    function flush() {
+      if (currentKey) {
+        fields[currentKey] = currentBody.join('\n').trim() || '(none)';
+      }
+      currentKey = null;
+      currentBody = [];
+    }
+
+    allLines.forEach(function(line) {
+      var matchedHeading = KNOWN_HEADINGS.find(function(h) { return line.indexOf(h) === 0; });
+      if (matchedHeading) {
+        flush();
+        currentKey = HEADING_FIELD_KEYS[matchedHeading];
+      } else if (currentKey) {
+        currentBody.push(line);
+      }
+    });
+    flush();
+    return fields;
+  }
 
   var deviceCatalogue = [
     { label: "Desk station (8ch)", code: "55300-011" },
@@ -1133,10 +1182,6 @@
 
     // Body content reuses the same plain-text summary, split into known sections
     var raw = buildSummary();
-    var knownHeadings = [
-      'ROOMS / ZONES', 'DEVICES', 'ANTENNA COVERAGE', 'BATTERIES & CHARGERS',
-      'USERS', 'GROUPS', 'PROGRAM AUDIO', 'RADIO INTEGRATION', 'MISC / INTERFACES', 'KIT LIST'
-    ];
     var allLines = raw.split('\n');
     var currentHeading = null;
     var currentBody = [];
@@ -1153,7 +1198,7 @@
     }
 
     allLines.forEach(function(line) {
-      var matchedHeading = knownHeadings.find(function(h) { return line.indexOf(h) === 0; });
+      var matchedHeading = KNOWN_HEADINGS.find(function(h) { return line.indexOf(h) === 0; });
       if (matchedHeading) {
         flushSection();
         currentHeading = line;
@@ -1199,15 +1244,22 @@
     btn.textContent = 'Submitting...';
     statusEl.className = '';
     statusEl.textContent = '';
-    var jobNumber = document.getElementById('job-number').value || '';
+    var jobNumber = document.getElementById('job-number').value || '(not given)';
     var showName = document.getElementById('show-name').value || '(untitled)';
+    var filledBy = document.getElementById('filled-by').value || '(not given)';
+    var sectionFields = splitSummaryIntoFields(lastSummaryText);
+    var payload = {
+      subject: 'Green-GO planner: ' + (jobNumber !== '(not given)' ? jobNumber + ' — ' : '') + showName,
+      planner_version: PLANNER_VERSION,
+      job_number: jobNumber,
+      show_event: showName,
+      filled_in_by: filledBy
+    };
+    Object.keys(sectionFields).forEach(function(key) { payload[key] = sectionFields[key]; });
     fetch(FORMSPREE_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({
-        subject: 'Green-GO planner: ' + (jobNumber ? jobNumber + ' — ' : '') + showName,
-        summary: lastSummaryText
-      })
+      body: JSON.stringify(payload)
     }).then(function(res) {
       if (res.ok) {
         statusEl.className = 'ok';
