@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Green-GO system planner — 4wall</title>
+<style>
+  :root {
+    --bg: #FAF8F3;
+    --ink: #1C1C1A;
+    --muted: #6B6B63;
+    --green: #2E8B4F;
+    --green-dark: #1F6038;
+    --amber: #D98E3F;
+    --card: #FFFFFF;
+    --border: #E3DFD3;
+    --info-bg: #EAF3EC;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 32px 20px 80px;
+  }
+  .eyebrow {
+    display: inline-block;
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    margin-bottom: 12px;
+  }
+  h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 28px; }
+  .section { margin-bottom: 32px; }
+  .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .section-desc { font-size: 13px; color: var(--muted); margin: 0 0 14px; }
+  .row {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    display: grid;
+    gap: 8px;
+    align-items: center;
+  }
+  .row-rooms { grid-template-columns: 1fr; }
+  .row-links { grid-template-columns: 1fr 1fr 1fr auto; }
+  .room-meta { font-size: 12px; color: var(--muted); padding-left: 2px; }
+  .row-devices { grid-template-columns: 1.1fr 1.3fr 1fr 1fr auto; }
+  .row-users-top { grid-template-columns: 1fr 1fr 1fr auto; }
+  .row-misc { display: flex; align-items: center; justify-content: space-between; }
+  label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px; }
+  input[type=text], input[type=number], select, textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 14px;
+    color: var(--ink);
+    font-family: inherit;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: 2px solid var(--green);
+    outline-offset: 1px;
+  }
+  button {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--ink);
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button:hover { background: var(--info-bg); }
+  .btn-add { display: flex; align-items: center; gap: 6px; }
+  .btn-remove { padding: 6px 9px; }
+  .btn-primary {
+    background: var(--green);
+    color: #fff;
+    border: none;
+    font-weight: 600;
+    padding: 12px 16px;
+    font-size: 15px;
+    width: 100%;
+  }
+  .btn-primary:hover { background: var(--green-dark); }
+  .btn-primary:disabled { background: var(--muted); cursor: not-allowed; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
+  .calc-box {
+    background: var(--info-bg);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-top: 10px;
+    font-size: 12.5px;
+    color: var(--green-dark);
+  }
+  .calc-box p { margin: 2px 0; }
+  .empty-note { font-size: 13px; color: var(--muted); margin: 0; padding: 6px 2px; }
+  .radio-group { display: flex; gap: 16px; margin-bottom: 12px; }
+  .radio-group label { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink); cursor: pointer; margin: 0; }
+  .radio-group input { width: auto; }
+  .conditional { display: none; flex-direction: column; gap: 10px; }
+  .conditional.show { display: flex; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 28px; }
+  .user-extra { display: flex; align-items: center; gap: 16px; padding-left: 2px; margin-top: 6px; font-size: 12.5px; color: var(--muted); }
+  .user-extra select { width: auto; height: 30px; font-size: 12.5px; padding: 4px 8px; }
+  .group-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+  .group-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .group-head input { flex: 1; font-weight: 600; }
+  .member-row { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 4px 0; }
+  .member-row label { flex: 1; display: flex; align-items: center; gap: 6px; color: var(--ink); margin: 0; cursor: pointer; }
+  .member-row label input { width: auto; margin: 0; }
+  .member-row select { width: 130px; height: 30px; font-size: 12.5px; padding: 4px 8px; }
+  .cross-room-note { font-size: 12px; color: var(--green-dark); margin: 8px 0 0; }
+  .misc-add-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .misc-add-row select { flex: 1; }
+  .misc-add-row input { width: 70px; }
+  #summary-output { display: none; }
+  pre#summary-text {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    font-family: "Courier New", monospace;
+    font-size: 12.5px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    margin: 0;
+  }
+  #submit-status { font-size: 13px; margin-top: 10px; }
+  #submit-status.ok { color: var(--green-dark); }
+  #submit-status.err { color: #993C1D; }
+  .copy-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  @media (max-width: 600px) {
+    .row-devices { grid-template-columns: 1fr; }
+    .row-users-top { grid-template-columns: 1fr; }
+    .row-links { grid-template-columns: 1fr; }
+    .two-col { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="eyebrow">COMMS BUILD SHEET</span>
+  <h1>Green-GO system planner</h1>
+  <p class="sub">Fill in who needs to talk to who. No tech knowledge needed — leave anything blank if you're not sure. When you're done, hit submit at the bottom and it'll land straight in Reece's inbox.</p>
+
+  <div class="two-col">
+    <div>
+      <label for="show-name">Show / event name</label>
+      <input type="text" id="show-name" placeholder="e.g. Riverside Festival 2026">
+    </div>
+    <div>
+      <label for="filled-by">Filled in by</label>
+      <input type="text" id="filled-by" placeholder="Your name">
+    </div>
+  </div>
+
+  <hr>
+
+  <div class="section">
+    <div class="section-head">
+      <h2>Rooms / zones</h2>
+      <button id="add-room" class="btn-add" type="button"><span>+</span>Add room</button>
+    </div>
+    <p class="section-desc">Every physical space with any kit in it — list all of them, wireless or not. This is your site plan.</p>
+    <div id="room-list"></div>
+
+    <div style="margin-top: 20px;">
+      <div class="section-head">
+        <p style="font-size: 13px; margin: 0; font-weight: 600;">Room-to-room links</p>
+        <button id="add-link" class="btn-add" type="button"><span>+</span>Add link</button>
+      </div>
+      <p style="font-size: 12.5px; color: var(--muted); margin: 4px 0 10px;">If any rooms need a physical or network link between them — e.g. a cable run or network trunk joining two rooms into one system — add one row per link. Leave empty if none are needed.</p>
+      <div id="link-list"></div>
+    </div>
+  </div>
+
+  <hr>
+
+  <div class="section">
+    <div class="section-head">
+      <h2>Devices</h2>
+      <button id="add-device" class="btn-add" type="button"><span>+</span>Add device</button>
+    </div>
+    <p class="section-desc">Every beltpack, desk station or rack unit — give it a room, and an optional note for exactly where it sits.</p>
+    <div id="device-list"></div>
+    <div id="antenna-summary" class="calc-box" style="display:none;"></div>
+  </div>
+
+  <hr>
+
+  <div class="section">
+    <h2>Batteries &amp; chargers</h2>
+    <p class="section-desc">One battery is assumed per wireless beltpack. Add spares if you want extras on hand — charger units work it out for you.</p>
+    <div class="two-col" style="margin-bottom: 10px;">
+      <div>
+        <label for="battery-base">Wireless packs (auto)</label>
+        <input type="text" id="battery-base" value="0" disabled style="background:var(--bg); color:var(--muted);">
+      </div>
+      <div>
+        <label for="battery-spares">Spare batteries</label>
+        <input type="number" id="battery-spares" value="0" min="0">
+      </div>
+    </div>
+    <div id="battery-summary" class="calc-box"></div>
+    <div id="charger-total" style="margin-top: 10px; display: flex; align-items: baseline; gap: 8px;">
+      <span style="font-size: 13px; color: var(--muted);">Chargers needed on this job:</span>
+      <span id="charger-total-count" style="font-size: 20px; font-weight: 700; color: var(--green-dark);">0</span>
+    </div>
+  </div>
+
+  <hr>
+
+  <div class="section">
+    <div class="section-head">
+      <h2>Users</h2>
+      <button id="add-user" class="btn-add" type="button"><span>+</span>Add user</button>
+    </div>
+    <p class="section-desc">Who's on the system, their role, device, headset, and whether they move between rooms.</p>
+    <div id="user-list"></div>
+  </div>
+
+  <hr>
+
+  <div class="section">
+    <div class="section-head">
+      <h2>Groups</h2>
+      <button id="add-group" class="btn-add" type="button"><span>+</span>Add group</button>
+    </div>
+    <p class="section-desc">A channel of people who talk together — e.g. "Camera", "Stage Management". Tick who's in it, and whether they can talk or only listen. If members span more than one room, that's a cross-room talk link — it's flagged automatically.</p>
+    <div id="group-list"></div>
+  </div>
+
+  <hr>
+
+  <div class="section">
+    <h2>Program audio</h2>
+    <p class="section-desc">Does any outside audio need to be piped into the comms system — a show feed, a paging mic, a stage mix?</p>
+    <div class="radio-group">
+      <label><input type="radio" name="pgm-needed" value="yes" id="pgm-yes">Yes</label>
+      <label><input type="radio" name="pgm-needed" value="no" id="pgm-no" checked>No</label>
+    </div>
+    <div id="pgm-detail" class="conditional">
+      <div>
+        <label for="pgm-source">What's the audio source?</label>
+        <input type="text" id="pgm-source" placeholder="e.g. FOH mix, paging mic, broadcast feed">
+      </div>
+      <div>
+        <label>Which group(s) should hear it?</label>
+        <div id="pgm-group-checks" style="display: flex; flex-direction: column; gap: 6px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <hr>
+
+  <div class="section">
+    <h2>Radio integration</h2>
+    <p class="section-desc">Does the comms system need to talk to two-way radios (via the Green-GO RDX unit)?</p>
+    <div class="radio-group">
+      <label><input type="radio" name="radio-needed" value="yes" id="radio-yes">Yes</label>
+      <label><input type="radio" name="radio-needed" value="no" id="radio-no" checked>No</label>
+    </div>
+    <div id="radio-detail" class="conditional">
+      <div>
+        <label for="radio-model">Radio model being used</label>
+        <input type="text" id="radio-model" placeholder="e.g. Motorola DP4600">
+      </div>
+      <div>
+        <label for="radio-supplier">Who's supplying the radios?</label>
+        <input type="text" id="radio-supplier" placeholder="e.g. 4wall, client, venue">
+      </div>
+    </div>
+  </div>
+
+  <hr>
+
+  <div class="section">
+    <h2>Misc / interfaces</h2>
+    <p class="section-desc">Any additional interfaces or accessories needed — pick from the list and set a quantity.</p>
+    <div class="misc-add-row">
+      <select id="misc-select"></select>
+      <input type="number" id="misc-qty" value="1" min="1">
+      <button id="misc-add" class="btn-add" type="button"><span>+</span>Add</button>
+    </div>
+    <div id="misc-list"></div>
+  </div>
+
+  <hr>
+
+  <button id="export-btn" class="btn-primary" type="button">Generate summary</button>
+
+  <div id="summary-output">
+    <div class="copy-row" style="margin-top: 24px;">
+      <h2>Summary</h2>
+      <button id="copy-summary" type="button">Copy text</button>
+    </div>
+    <pre id="summary-text"></pre>
+
+    <div style="margin-top: 16px;">
+      <button id="submit-btn" class="btn-primary" type="button">Submit to Reece</button>
+      <p id="submit-status"></p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function() {
+  // ---- CONFIG ----
+  // Replace this with your real Formspree endpoint, e.g. "https://formspree.io/f/abcd1234"
+  var FORMSPREE_ENDPOINT = "https://formspree.io/f/mbdvddvk";
+
+  var deviceCatalogue = [
+    { label: "Desk station (8ch)", code: "55300-011" },
+    { label: "Desk station (16ch)", code: "55300-021" },
+    { label: "Desk station (32ch)", code: "55300-211" },
+    { label: "Rack station (32ch)", code: "55300-201" },
+    { label: "Wall panel station", code: "55300-231" },
+    { label: "Beltpack (wired)", code: "55300-070" },
+    { label: "Beltpack (wireless)", code: "55300-311" }
+  ];
+  var STATION_CODES = ["55300-011", "55300-021", "55300-211", "55300-201", "55300-231"];
+  var STATION_PSU = { label: "Power supply 12V", code: "55300-202" };
+  var BATTERY_CODE = "55300-312";
+  var BATTERY_LABEL = "Battery (Beltpack X)";
+  var CHARGER = { label: "Charger 6-unit (1RU)", code: "55300-315", capacity: 6 };
+  var CHARGER_PSU = { label: "Power supply 12V/2A (charger)", code: "55300-316" };
+  var miscCatalogue = [
+    { label: "Microphone gooseneck", code: "55300-209" },
+    { label: "Rackmount quad 4-wire interface", code: "55300-401" },
+    { label: "Rackmount dual 4-wire interface", code: "55300-405" },
+    { label: "RDX/Motorola 3.5/2.5mm mono jack", code: "55300-411" },
+    { label: "RDX/Motorola 12-pin/3.5mm pitch", code: "55300-412" },
+    { label: "RDX/Motorola 12-pin/2.5mm pitch", code: "55300-413" },
+    { label: "BridgeX interface", code: "55300-431" },
+    { label: "Dante interface", code: "55300-441" }
+  ];
+  var ANTENNA_WAA = { label: "Antenna — WAA (standard)", code: "55300-301", capacity: 4 };
+  var ANTENNA_STRIDE = { label: "Antenna — Stride", code: "55300-305", capacity: 5 };
+  var RDX_CODE = "55300-421";
+  var headsetTypes = ["Single muff", "Dual muff"];
+  var linkMethods = ["Dante", "Network link", "4-wire", "2-wire", "Other"];
+
+  var rooms = [], devices = [], users = [], groups = [], miscItems = [], links = [];
+  var pgmGroupSelections = {};
+
+  function uid(prefix) { return prefix + '-' + (Date.now() + Math.random()).toString(36); }
+  function escapeAttr(s) { return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+  function isWirelessCode(code) { return code === '55300-311'; }
+  function isStationCode(code) { return STATION_CODES.indexOf(code) !== -1; }
+
+  function renderRooms() {
+    var list = document.getElementById('room-list');
+    list.innerHTML = '';
+    rooms.forEach(function(r) {
+      var devicesInRoom = devices.filter(function(d) { return d.roomId === r.id; });
+      var wirelessCount = devicesInRoom.filter(function(d) { return isWirelessCode(d.code); }).length;
+      var row = document.createElement('div');
+      row.className = 'row row-rooms';
+      row.innerHTML =
+        '<div style="display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center;">' +
+        '<input type="text" placeholder="Room name, e.g. Main hall" value="' + escapeAttr(r.name) + '" data-id="' + r.id + '" class="room-input">' +
+        '<button data-id="' + r.id + '" class="room-remove btn-remove" type="button">Remove</button>' +
+        '</div>' +
+        '<p class="room-meta">' + devicesInRoom.length + ' device' + (devicesInRoom.length === 1 ? '' : 's') +
+        (wirelessCount > 0 ? ' — ' + wirelessCount + ' wireless' : ' — no wireless') + '</p>';
+      list.appendChild(row);
+    });
+    if (rooms.length === 0) {
+      list.innerHTML = '<p class="empty-note">No rooms yet — add one above before assigning devices.</p>';
+    }
+    document.querySelectorAll('.room-input').forEach(function(el) {
+      el.addEventListener('input', function() {
+        var r = rooms.find(function(x) { return x.id === el.dataset.id; });
+        if (r) r.name = el.value;
+        renderAntennaSummary();
+        refreshRoomOptionsInDevices();
+      });
+    });
+    document.querySelectorAll('.room-remove').forEach(function(el) {
+      el.addEventListener('click', function() {
+        rooms = rooms.filter(function(x) { return x.id !== el.dataset.id; });
+        devices.forEach(function(d) { if (d.roomId === el.dataset.id) d.roomId = ''; });
+        links.forEach(function(l) {
+          if (l.roomAId === el.dataset.id) l.roomAId = '';
+          if (l.roomBId === el.dataset.id) l.roomBId = '';
+        });
+        renderRooms();
+        renderDevices();
+        renderLinks();
+      });
+    });
+    refreshRoomOptionsInDevices();
+    renderLinks();
+  }
+
+  function renderLinks() {
+    var list = document.getElementById('link-list');
+    list.innerHTML = '';
+    function roomOptions(selectedId) {
+      return '<option value="">Select room...</option>' + rooms.map(function(r) {
+        return '<option value="' + r.id + '"' + (selectedId === r.id ? ' selected' : '') + '>' + (r.name || 'Unnamed room') + '</option>';
+      }).join('');
+    }
+    function methodOptions(selected) {
+      return linkMethods.map(function(m) {
+        return '<option value="' + m + '"' + (selected === m ? ' selected' : '') + '>' + m + '</option>';
+      }).join('');
+    }
+    links.forEach(function(l) {
+      var row = document.createElement('div');
+      row.className = 'row';
+      row.style.display = 'block';
+      var isOther = l.method === 'Other';
+      row.innerHTML =
+        '<div class="row-links" style="display:grid;">' +
+        '<select data-id="' + l.id + '" data-field="roomAId" class="link-room-select">' + roomOptions(l.roomAId) + '</select>' +
+        '<select data-id="' + l.id + '" data-field="roomBId" class="link-room-select">' + roomOptions(l.roomBId) + '</select>' +
+        '<select data-id="' + l.id + '" class="link-method-select">' + methodOptions(l.method) + '</select>' +
+        '<button data-id="' + l.id + '" class="link-remove btn-remove" type="button">Remove</button>' +
+        '</div>' +
+        '<input type="text" placeholder="Describe the link method" value="' + escapeAttr(l.methodOther) + '" data-id="' + l.id + '" class="link-method-other" style="margin-top:8px; ' + (isOther ? '' : 'display:none;') + '">';
+      list.appendChild(row);
+    });
+    if (links.length === 0) {
+      list.innerHTML = '<p class="empty-note">No links needed — add one if two rooms need to be physically or network connected.</p>';
+    }
+    document.querySelectorAll('.link-room-select').forEach(function(el) {
+      el.addEventListener('change', function() {
+        var l = links.find(function(x) { return x.id === el.dataset.id; });
+        if (l) l[el.dataset.field] = el.value;
+      });
+    });
+    document.querySelectorAll('.link-method-select').forEach(function(el) {
+      el.addEventListener('change', function() {
+        var l = links.find(function(x) { return x.id === el.dataset.id; });
+        if (l) l.method = el.value;
+        renderLinks();
+      });
+    });
+    document.querySelectorAll('.link-method-other').forEach(function(el) {
+      el.addEventListener('input', function() {
+        var l = links.find(function(x) { return x.id === el.dataset.id; });
+        if (l) l.methodOther = el.value;
+      });
+    });
+    document.querySelectorAll('.link-remove').forEach(function(el) {
+      el.addEventListener('click', function() {
+        links = links.filter(function(x) { return x.id !== el.dataset.id; });
+        renderLinks();
+      });
+    });
+  }
+
+  function refreshRoomOptionsInDevices() {
+    document.querySelectorAll('.dev-room-select').forEach(function(sel) {
+      var current = sel.value;
+      sel.innerHTML = '<option value="">Select room...</option>' + rooms.map(function(r) {
+        return '<option value="' + r.id + '"' + (current === r.id ? ' selected' : '') + '>' + (r.name || 'Unnamed room') + '</option>';
+      }).join('');
+    });
+  }
+  function renderDevices() {
+    var list = document.getElementById('device-list');
+    list.innerHTML = '';
+    devices.forEach(function(d) {
+      var row = document.createElement('div');
+      row.className = 'row row-devices';
+      row.innerHTML =
+        '<input type="text" placeholder="Device name, e.g. FOH-1" value="' + escapeAttr(d.name) + '" data-id="' + d.id + '" data-field="name" class="dev-input">' +
+        '<select data-id="' + d.id + '" class="dev-type-select">' +
+          deviceCatalogue.map(function(t) { return '<option value="' + t.code + '"' + (d.code === t.code ? ' selected' : '') + '>' + t.label + ' (' + t.code + ')</option>'; }).join('') +
+        '</select>' +
+        '<select data-id="' + d.id + '" class="dev-room-select">' +
+          '<option value="">Select room...</option>' +
+          rooms.map(function(r) { return '<option value="' + r.id + '"' + (d.roomId === r.id ? ' selected' : '') + '>' + (r.name || 'Unnamed room') + '</option>'; }).join('') +
+        '</select>' +
+        '<input type="text" placeholder="Specific spot (optional)" value="' + escapeAttr(d.location) + '" data-id="' + d.id + '" data-field="location" class="dev-input">' +
+        '<button data-id="' + d.id + '" class="dev-remove btn-remove" type="button">Remove</button>';
+      list.appendChild(row);
+    });
+    if (devices.length === 0) {
+      list.innerHTML = '<p class="empty-note">No devices yet — add one above.</p>';
+    }
+    document.querySelectorAll('.dev-input').forEach(function(el) {
+      el.addEventListener('input', function() {
+        var d = devices.find(function(x) { return x.id === el.dataset.id; });
+        if (d) d[el.dataset.field] = el.value;
+        refreshDeviceOptionsInUsers();
+      });
+    });
+    document.querySelectorAll('.dev-type-select').forEach(function(el) {
+      el.addEventListener('change', function() {
+        var d = devices.find(function(x) { return x.id === el.dataset.id; });
+        if (d) d.code = el.value;
+        refreshDeviceOptionsInUsers();
+        renderAntennaSummary();
+        renderBatterySummary();
+        renderRooms();
+      });
+    });
+    document.querySelectorAll('.dev-remove').forEach(function(el) {
+      el.addEventListener('click', function() {
+        devices = devices.filter(function(x) { return x.id !== el.dataset.id; });
+        users.forEach(function(u) { if (u.deviceId === el.dataset.id) u.deviceId = ''; });
+        renderDevices();
+        renderUsers();
+        renderAntennaSummary();
+        renderBatterySummary();
+        renderRooms();
+      });
+    });
+    refreshRoomOptionsInDevices();
+    document.querySelectorAll('.dev-room-select').forEach(function(el) {
+      el.addEventListener('change', function() {
+        var d = devices.find(function(x) { return x.id === el.dataset.id; });
+        if (d) d.roomId = el.value;
+        renderAntennaSummary();
+        renderRooms();
+      });
+    });
+    refreshDeviceOptionsInUsers();
+    renderAntennaSummary();
+    renderBatterySummary();
+  }
+
+  function calculateAntennaPlan() {
+    var plan = [];
+    rooms.forEach(function(r) {
+      var wirelessInRoom = devices.filter(function(d) { return d.roomId === r.id && isWirelessCode(d.code); });
+      if (wirelessInRoom.length === 0) return;
+      var roamerPresent = users.some(function(u) {
+        return u.roaming && wirelessInRoom.some(function(d) { return d.id === u.deviceId; });
+      });
+      var antennaType = roamerPresent ? ANTENNA_STRIDE : ANTENNA_WAA;
+      var count = Math.ceil(wirelessInRoom.length / antennaType.capacity);
+      plan.push({ room: r.name || 'Unnamed room', packCount: wirelessInRoom.length, roaming: roamerPresent, antenna: antennaType, count: count });
+    });
+    return plan;
+  }
+
+  function renderAntennaSummary() {
+    var box = document.getElementById('antenna-summary');
+    var plan = calculateAntennaPlan();
+    if (plan.length === 0) { box.style.display = 'none'; return; }
+    box.style.display = 'block';
+    box.innerHTML = '<p style="font-weight:600; margin-bottom:6px;">Antenna coverage (calculated)</p>' +
+      plan.map(function(p) {
+        return '<p>' + p.room + ': ' + p.packCount + ' wireless pack' + (p.packCount === 1 ? '' : 's') +
+          (p.roaming ? ' (roaming user present — needs Stride)' : ' (no roaming — standard WAA is fine)') +
+          ' → ' + p.count + ' × ' + p.antenna.label + ' (' + p.antenna.code + ')</p>';
+      }).join('');
+  }
+
+  function wirelessPackCount() {
+    return devices.filter(function(d) { return isWirelessCode(d.code); }).length;
+  }
+
+  function calculateBatteryPlan() {
+    var base = wirelessPackCount();
+    var spares = Math.max(0, parseInt(document.getElementById('battery-spares').value, 10) || 0);
+    var total = base + spares;
+    var chargers = Math.ceil(total / CHARGER.capacity);
+    return { base: base, spares: spares, total: total, chargers: chargers };
+  }
+
+  function renderBatterySummary() {
+    document.getElementById('battery-base').value = wirelessPackCount();
+    var plan = calculateBatteryPlan();
+    var box = document.getElementById('battery-summary');
+    box.innerHTML = '<p style="font-weight:600; margin-bottom:4px;">Battery &amp; charger plan (calculated)</p>' +
+      '<p>' + plan.base + ' pack' + (plan.base === 1 ? '' : 's') + ' + ' + plan.spares + ' spare' + (plan.spares === 1 ? '' : 's') + ' = ' + plan.total + ' batteries total</p>' +
+      '<p>→ ' + plan.chargers + ' × ' + CHARGER.label + ' (' + CHARGER.code + '), each with 1 × ' + CHARGER_PSU.label + ' (' + CHARGER_PSU.code + ')</p>';
+    document.getElementById('charger-total-count').textContent = plan.chargers;
+  }
+
+  function refreshDeviceOptionsInUsers() {
+    document.querySelectorAll('.user-device-select').forEach(function(sel) {
+      var current = sel.value;
+      sel.innerHTML = '<option value="">Select device...</option>' + devices.map(function(d) {
+        return '<option value="' + d.id + '"' + (current === d.id ? ' selected' : '') + '>' + (d.name || 'Unnamed device') + '</option>';
+      }).join('');
+    });
+  }
+
+  function renderUsers() {
+    var list = document.getElementById('user-list');
+    list.innerHTML = '';
+    users.forEach(function(u) {
+      var device = devices.find(function(x) { return x.id === u.deviceId; });
+      var wireless = device && isWirelessCode(device.code);
+      var card = document.createElement('div');
+      card.className = 'row';
+      card.style.display = 'block';
+      card.innerHTML =
+        '<div class="row-users-top" style="display:grid;">' +
+        '<input type="text" placeholder="Name" value="' + escapeAttr(u.name) + '" data-id="' + u.id + '" data-field="name" class="usr-input">' +
+        '<input type="text" placeholder="Role, e.g. Stage Manager" value="' + escapeAttr(u.role) + '" data-id="' + u.id + '" data-field="role" class="usr-input">' +
+        '<select data-id="' + u.id + '" class="user-device-select">' +
+          '<option value="">Select device...</option>' +
+          devices.map(function(d) { return '<option value="' + d.id + '"' + (u.deviceId === d.id ? ' selected' : '') + '>' + (d.name || 'Unnamed device') + '</option>'; }).join('') +
+        '</select>' +
+        '<button data-id="' + u.id + '" class="usr-remove btn-remove" type="button">Remove</button>' +
+        '</div>' +
+        '<div class="user-extra">' +
+          '<span>Headset</span>' +
+          '<select data-id="' + u.id + '" data-field="headset" class="usr-headset-select">' +
+            headsetTypes.map(function(h) { return '<option value="' + h + '"' + (u.headset === h ? ' selected' : '') + '>' + h + '</option>'; }).join('') +
+          '</select>' +
+          (wireless ? '<label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin:0;"><input type="checkbox" data-id="' + u.id + '" class="usr-roaming-check" ' + (u.roaming ? 'checked' : '') + ' style="width:auto;">Roams between rooms</label>' : '') +
+        '</div>';
+      list.appendChild(card);
+    });
+    if (users.length === 0) {
+      list.innerHTML = '<p class="empty-note">No users yet — add one above.</p>';
+    }
+    document.querySelectorAll('.usr-input').forEach(function(el) {
+      el.addEventListener('input', function() {
+        var u = users.find(function(x) { return x.id === el.dataset.id; });
+        if (u) u[el.dataset.field] = el.value;
+        renderGroups();
+      });
+    });
+    refreshDeviceOptionsInUsers();
+    document.querySelectorAll('.user-device-select').forEach(function(el) {
+      el.addEventListener('change', function() {
+        var u = users.find(function(x) { return x.id === el.dataset.id; });
+        if (u) u.deviceId = el.value;
+        renderUsers();
+        renderAntennaSummary();
+        renderGroups();
+      });
+    });
+    document.querySelectorAll('.usr-headset-select').forEach(function(el) {
+      el.addEventListener('change', function() {
+        var u = users.find(function(x) { return x.id === el.dataset.id; });
+        if (u) u.headset = el.value;
+      });
+    });
+    document.querySelectorAll('.usr-roaming-check').forEach(function(el) {
+      el.addEventListener('change', function() {
+        var u = users.find(function(x) { return x.id === el.dataset.id; });
+        if (u) u.roaming = el.checked;
+        renderAntennaSummary();
+      });
+    });
+    document.querySelectorAll('.usr-remove').forEach(function(el) {
+      el.addEventListener('click', function() {
+        users = users.filter(function(x) { return x.id !== el.dataset.id; });
+        groups.forEach(function(g) { delete g.members[el.dataset.id]; });
+        renderUsers();
+        renderGroups();
+        renderAntennaSummary();
+      });
+    });
+  }
+
+  function roomsForGroup(g) {
+    var memberIds = Object.keys(g.members).filter(function(uidKey) { return g.members[uidKey].in; });
+    var roomNames = {};
+    memberIds.forEach(function(uidKey) {
+      var u = users.find(function(x) { return x.id === uidKey; });
+      if (!u || !u.deviceId) return;
+      var d = devices.find(function(x) { return x.id === u.deviceId; });
+      if (!d || !d.roomId) return;
+      var r = rooms.find(function(x) { return x.id === d.roomId; });
+      if (r) roomNames[r.name || 'Unnamed room'] = true;
+    });
+    return Object.keys(roomNames);
+  }
+
+  function renderGroups() {
+    var list = document.getElementById('group-list');
+    list.innerHTML = '';
+    groups.forEach(function(g) {
+      var card = document.createElement('div');
+      card.className = 'group-card';
+      var membersHtml = '';
+      if (users.length === 0) {
+        membersHtml = '<p class="empty-note">Add some users above to assign them to this group.</p>';
+      } else {
+        membersHtml = users.map(function(u) {
+          var m = g.members[u.id] || { in: false, perm: 'talk' };
+          return '<div class="member-row">' +
+            '<label><input type="checkbox" data-group="' + g.id + '" data-user="' + u.id + '" class="grp-member-check" ' + (m.in ? 'checked' : '') + '>' + (u.name || 'Unnamed user') + '</label>' +
+            '<select data-group="' + g.id + '" data-user="' + u.id + '" class="grp-perm-select" style="' + (m.in ? '' : 'visibility:hidden;') + '">' +
+              '<option value="talk"' + (m.perm === 'talk' ? ' selected' : '') + '>Talk + listen</option>' +
+              '<option value="listen"' + (m.perm === 'listen' ? ' selected' : '') + '>Listen only</option>' +
+            '</select>' +
+          '</div>';
+        }).join('');
+      }
+      var spanRooms = roomsForGroup(g);
+      var crossRoomNote = spanRooms.length > 1
+        ? '<p class="cross-room-note">Cross-room talk link: ' + spanRooms.join(' ↔ ') + '</p>'
+        : '';
+      card.innerHTML =
+        '<div class="group-head">' +
+          '<input type="text" placeholder="Group name, e.g. Camera" value="' + escapeAttr(g.name) + '" data-id="' + g.id + '" class="grp-name-input">' +
+          '<button data-id="' + g.id + '" class="grp-remove btn-remove" type="button">Remove</button>' +
+        '</div>' + membersHtml + crossRoomNote;
+      list.appendChild(card);
+    });
+    if (groups.length === 0) {
+      list.innerHTML = '<p class="empty-note">No groups yet — add one above.</p>';
+    }
+    document.querySelectorAll('.grp-name-input').forEach(function(el) {
+      el.addEventListener('input', function() {
+        var g = groups.find(function(x) { return x.id === el.dataset.id; });
+        if (g) g.name = el.value;
+      });
+    });
+    document.querySelectorAll('.grp-remove').forEach(function(el) {
+      el.addEventListener('click', function() {
+        groups = groups.filter(function(x) { return x.id !== el.dataset.id; });
+        renderGroups();
+      });
+    });
+    document.querySelectorAll('.grp-member-check').forEach(function(el) {
+      el.addEventListener('change', function() {
+        var g = groups.find(function(x) { return x.id === el.dataset.group; });
+        if (!g) return;
+        if (!g.members[el.dataset.user]) g.members[el.dataset.user] = { in: false, perm: 'talk' };
+        g.members[el.dataset.user].in = el.checked;
+        renderGroups();
+      });
+    });
+    document.querySelectorAll('.grp-perm-select').forEach(function(el) {
+      el.addEventListener('change', function() {
+        var g = groups.find(function(x) { return x.id === el.dataset.group; });
+        if (!g) return;
+        if (!g.members[el.dataset.user]) g.members[el.dataset.user] = { in: true, perm: 'talk' };
+        g.members[el.dataset.user].perm = el.value;
+      });
+    });
+    renderPgmGroupChecklist();
+  }
+
+  function renderPgmGroupChecklist() {
+    var box = document.getElementById('pgm-group-checks');
+    // drop selections for groups that no longer exist
+    Object.keys(pgmGroupSelections).forEach(function(gid) {
+      if (!groups.some(function(g) { return g.id === gid; })) delete pgmGroupSelections[gid];
+    });
+    if (groups.length === 0) {
+      box.innerHTML = '<p class="empty-note">Add some groups above first.</p>';
+      return;
+    }
+    box.innerHTML = groups.map(function(g) {
+      var checked = pgmGroupSelections[g.id] ? 'checked' : '';
+      return '<label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin:0; font-size:14px;">' +
+        '<input type="checkbox" data-group="' + g.id + '" class="pgm-group-check" ' + checked + ' style="width:auto;">' +
+        (g.name || 'Unnamed group') + '</label>';
+    }).join('');
+    document.querySelectorAll('.pgm-group-check').forEach(function(el) {
+      el.addEventListener('change', function() {
+        pgmGroupSelections[el.dataset.group] = el.checked;
+      });
+    });
+  }
+
+  function renderMisc() {
+    var list = document.getElementById('misc-list');
+    list.innerHTML = '';
+    miscItems.forEach(function(m) {
+      var cat = miscCatalogue.find(function(x) { return x.code === m.code; });
+      var row = document.createElement('div');
+      row.className = 'row row-misc';
+      row.innerHTML =
+        '<span>' + (cat ? cat.label : m.code) + ' <span style="color:var(--muted); font-family:monospace; font-size:12px;">(' + m.code + ')</span> × ' + m.qty + '</span>' +
+        '<button data-id="' + m.id + '" class="misc-remove btn-remove" type="button">Remove</button>';
+      list.appendChild(row);
+    });
+    if (miscItems.length === 0) {
+      list.innerHTML = '<p class="empty-note">No misc items added yet.</p>';
+    }
+    document.querySelectorAll('.misc-remove').forEach(function(el) {
+      el.addEventListener('click', function() {
+        miscItems = miscItems.filter(function(x) { return x.id !== el.dataset.id; });
+        renderMisc();
+      });
+    });
+  }
+
+  document.getElementById('add-room').addEventListener('click', function() {
+    rooms.push({ id: uid('room'), name: '' });
+    renderRooms();
+  });
+  document.getElementById('add-link').addEventListener('click', function() {
+    links.push({ id: uid('link'), roomAId: '', roomBId: '', method: linkMethods[0], methodOther: '' });
+    renderLinks();
+  });
+  document.getElementById('add-device').addEventListener('click', function() {
+    devices.push({ id: uid('dev'), name: '', code: deviceCatalogue[0].code, location: '', roomId: '' });
+    renderDevices();
+    renderRooms();
+  });
+  document.getElementById('add-user').addEventListener('click', function() {
+    users.push({ id: uid('usr'), name: '', role: '', deviceId: '', headset: headsetTypes[0], roaming: false });
+    renderUsers();
+    renderGroups();
+  });
+  document.getElementById('add-group').addEventListener('click', function() {
+    groups.push({ id: uid('grp'), name: '', members: {} });
+    renderGroups();
+  });
+  document.getElementById('battery-spares').addEventListener('input', renderBatterySummary);
+
+  var miscSelect = document.getElementById('misc-select');
+  miscSelect.innerHTML = miscCatalogue.map(function(m) { return '<option value="' + m.code + '">' + m.label + ' (' + m.code + ')</option>'; }).join('');
+  document.getElementById('misc-add').addEventListener('click', function() {
+    var code = miscSelect.value;
+    var qty = Math.max(1, parseInt(document.getElementById('misc-qty').value, 10) || 1);
+    var existing = miscItems.find(function(x) { return x.code === code; });
+    if (existing) {
+      existing.qty += qty;
+    } else {
+      miscItems.push({ id: uid('misc'), code: code, qty: qty });
+    }
+    document.getElementById('misc-qty').value = 1;
+    renderMisc();
+  });
+
+  document.getElementById('pgm-yes').addEventListener('change', togglePgm);
+  document.getElementById('pgm-no').addEventListener('change', togglePgm);
+  function togglePgm() {
+    document.getElementById('pgm-detail').classList.toggle('show', document.getElementById('pgm-yes').checked);
+  }
+  document.getElementById('radio-yes').addEventListener('change', toggleRadio);
+  document.getElementById('radio-no').addEventListener('change', toggleRadio);
+  function toggleRadio() {
+    document.getElementById('radio-detail').classList.toggle('show', document.getElementById('radio-yes').checked);
+  }
+
+  var lastSummaryText = '';
+
+  function buildSummary() {
+    var showName = document.getElementById('show-name').value || '(untitled)';
+    var filledBy = document.getElementById('filled-by').value || '(not given)';
+    var pgmYes = document.getElementById('pgm-yes').checked;
+    var pgmSource = document.getElementById('pgm-source').value;
+    var pgmGroupNames = groups.filter(function(g) { return pgmGroupSelections[g.id]; }).map(function(g) { return g.name || 'Unnamed group'; });
+    var radioYes = document.getElementById('radio-yes').checked;
+    var radioModel = document.getElementById('radio-model').value;
+    var radioSupplier = document.getElementById('radio-supplier').value;
+
+    function deviceLabel(code) {
+      var d = deviceCatalogue.find(function(x) { return x.code === code; });
+      return d ? d.label : code;
+    }
+    function deviceName(id) {
+      var d = devices.find(function(x) { return x.id === id; });
+      return d ? (d.name || 'Unnamed device') : 'Unassigned';
+    }
+    function roomName(id) {
+      var r = rooms.find(function(x) { return x.id === id; });
+      return r ? (r.name || 'Unnamed room') : '';
+    }
+    function miscLabel(code) {
+      var m = miscCatalogue.find(function(x) { return x.code === code; });
+      return m ? m.label : code;
+    }
+
+    var antennaPlan = calculateAntennaPlan();
+    var batteryPlan = calculateBatteryPlan();
+
+    var out = 'GREEN-GO SYSTEM PLANNER\n';
+    out += 'Show / event: ' + showName + '\n';
+    out += 'Filled in by: ' + filledBy + '\n';
+
+    out += '\nROOMS / ZONES (' + rooms.length + ')\n';
+    if (rooms.length === 0) out += '  none listed\n';
+    rooms.forEach(function(r) {
+      var devicesInRoom = devices.filter(function(d) { return d.roomId === r.id; });
+      var wirelessCount = devicesInRoom.filter(function(d) { return isWirelessCode(d.code); }).length;
+      out += '  - ' + (r.name || 'Unnamed') + '  (' + devicesInRoom.length + ' device(s), ' + wirelessCount + ' wireless)\n';
+    });
+    out += '\n  Room-to-room links: ' + (links.length === 0 ? 'None required' : links.length) + '\n';
+    links.forEach(function(l) {
+      var methodLabel = l.method === 'Other' ? ('Other - ' + (l.methodOther || 'not specified')) : (l.method || 'not specified');
+      out += '    ' + (roomName(l.roomAId) || 'not specified') + ' <-> ' + (roomName(l.roomBId) || 'not specified') +
+        '  via ' + methodLabel + '\n';
+    });
+
+    out += '\nDEVICES (' + devices.length + ')\n';
+    if (devices.length === 0) out += '  none listed\n';
+    devices.forEach(function(d) {
+      out += '  - ' + (d.name || 'Unnamed') + '  |  ' + deviceLabel(d.code) + ' (' + d.code + ')' +
+        '  |  room: ' + (roomName(d.roomId) || 'not assigned') +
+        (d.location ? '  |  ' + d.location : '') + '\n';
+    });
+
+    out += '\nANTENNA COVERAGE (calculated)\n';
+    if (antennaPlan.length === 0) {
+      out += '  No wireless beltpacks assigned to rooms yet\n';
+    } else {
+      antennaPlan.forEach(function(p) {
+        out += '  - ' + p.room + ': ' + p.packCount + ' wireless pack(s), ' + (p.roaming ? 'roaming user present' : 'no roaming') +
+          ' -> ' + p.count + ' x ' + p.antenna.label + ' (' + p.antenna.code + ')\n';
+      });
+    }
+
+    out += '\nBATTERIES & CHARGERS (calculated)\n';
+    out += '  ' + batteryPlan.base + ' wireless pack(s) + ' + batteryPlan.spares + ' spare(s) = ' + batteryPlan.total + ' batteries\n';
+    out += '  -> ' + batteryPlan.chargers + ' x ' + CHARGER.label + ' (' + CHARGER.code + ')\n';
+    out += '  -> ' + batteryPlan.chargers + ' x ' + CHARGER_PSU.label + ' (' + CHARGER_PSU.code + ')\n';
+
+    out += '\nUSERS (' + users.length + ')\n';
+    if (users.length === 0) out += '  none listed\n';
+    users.forEach(function(u) {
+      var dev = devices.find(function(x) { return x.id === u.deviceId; });
+      var wireless = dev && isWirelessCode(dev.code);
+      out += '  - ' + (u.name || 'Unnamed') + '  |  ' + (u.role || 'role not given') + '  |  device: ' + deviceName(u.deviceId) +
+        '  |  headset: ' + (u.headset || 'not given') + (wireless ? '  |  roaming: ' + (u.roaming ? 'yes' : 'no') : '') + '\n';
+    });
+
+    out += '\nGROUPS (' + groups.length + ')\n';
+    if (groups.length === 0) out += '  none listed\n';
+    groups.forEach(function(g) {
+      out += '  - ' + (g.name || 'Unnamed group') + '\n';
+      var memberIds = Object.keys(g.members).filter(function(uidKey) { return g.members[uidKey].in; });
+      if (memberIds.length === 0) {
+        out += '      (no members assigned)\n';
+      } else {
+        memberIds.forEach(function(uidKey) {
+          var u = users.find(function(x) { return x.id === uidKey; });
+          var perm = g.members[uidKey].perm === 'listen' ? 'listen only' : 'talk + listen';
+          out += '      ' + (u ? (u.name || 'Unnamed') : 'Unknown user') + ' - ' + perm + '\n';
+        });
+      }
+      var spanRooms = roomsForGroup(g);
+      if (spanRooms.length > 1) {
+        out += '      [cross-room talk link: ' + spanRooms.join(' <-> ') + ']\n';
+      }
+    });
+
+    out += '\nPROGRAM AUDIO\n';
+    if (pgmYes) {
+      out += '  Source: ' + (pgmSource || 'not specified') + '\n';
+      out += '  Routed to: ' + (pgmGroupNames.length > 0 ? pgmGroupNames.join(', ') : 'not specified') + '\n';
+    } else {
+      out += '  Not required\n';
+    }
+
+    out += '\nRADIO INTEGRATION\n';
+    if (radioYes) {
+      out += '  Radio model: ' + (radioModel || 'not specified') + '\n';
+      out += '  Supplied by: ' + (radioSupplier || 'not specified') + '\n';
+      out += '  Requires: GREEN GO RDX RADIO INTERFACE (' + RDX_CODE + ')\n';
+    } else {
+      out += '  Not required\n';
+    }
+
+    out += '\nMISC / INTERFACES\n';
+    if (miscItems.length === 0) {
+      out += '  none added\n';
+    } else {
+      miscItems.forEach(function(m) {
+        out += '  - ' + miscLabel(m.code) + ' (' + m.code + ')  x ' + m.qty + '\n';
+      });
+    }
+
+    out += '\nKIT LIST (I-Code / item / qty)\n';
+    var tally = {};
+    function add(code, label, qty) {
+      if (!tally[code]) tally[code] = { label: label, qty: 0 };
+      tally[code].qty += qty;
+    }
+    devices.forEach(function(d) {
+      add(d.code, deviceLabel(d.code), 1);
+      if (isStationCode(d.code)) add(STATION_PSU.code, STATION_PSU.label, 1);
+    });
+    antennaPlan.forEach(function(p) { add(p.antenna.code, p.antenna.label, p.count); });
+    if (batteryPlan.total > 0) {
+      add(BATTERY_CODE, BATTERY_LABEL, batteryPlan.total);
+      add(CHARGER.code, CHARGER.label, batteryPlan.chargers);
+      add(CHARGER_PSU.code, CHARGER_PSU.label, batteryPlan.chargers);
+    }
+    if (radioYes) add(RDX_CODE, 'RDX Radio Interface', 1);
+    miscItems.forEach(function(m) { add(m.code, miscLabel(m.code), m.qty); });
+    var codes = Object.keys(tally).sort();
+    if (codes.length === 0) {
+      out += '  (no items yet)\n';
+    } else {
+      codes.forEach(function(c) {
+        out += '  ' + c + '\t' + tally[c].label + '\t qty: ' + tally[c].qty + '\n';
+      });
+    }
+
+    return out;
+  }
+
+  document.getElementById('export-btn').addEventListener('click', function() {
+    lastSummaryText = buildSummary();
+    document.getElementById('summary-text').textContent = lastSummaryText;
+    document.getElementById('summary-output').style.display = 'block';
+    document.getElementById('summary-output').scrollIntoView({ behavior: 'smooth' });
+  });
+
+  document.getElementById('copy-summary').addEventListener('click', function() {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(lastSummaryText);
+      var btn = document.getElementById('copy-summary');
+      var orig = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(function() { btn.textContent = orig; }, 1500);
+    }
+  });
+
+  document.getElementById('submit-btn').addEventListener('click', function() {
+    var statusEl = document.getElementById('submit-status');
+    var btn = document.getElementById('submit-btn');
+    if (FORMSPREE_ENDPOINT.indexOf('YOUR_FORM_ID') !== -1) {
+      statusEl.className = 'err';
+      statusEl.textContent = 'Submission isn\'t wired up yet — Formspree endpoint needs to be added to the page.';
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Submitting...';
+    statusEl.className = '';
+    statusEl.textContent = '';
+    var showName = document.getElementById('show-name').value || '(untitled)';
+    fetch(FORMSPREE_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({
+        subject: 'Green-GO planner: ' + showName,
+        summary: lastSummaryText
+      })
+    }).then(function(res) {
+      if (res.ok) {
+        statusEl.className = 'ok';
+        statusEl.textContent = 'Submitted — this has been sent to Reece.';
+        btn.textContent = 'Submitted';
+      } else {
+        throw new Error('Request failed');
+      }
+    }).catch(function() {
+      statusEl.className = 'err';
+      statusEl.textContent = 'Something went wrong sending this. Please copy the summary above and send it directly instead.';
+      btn.disabled = false;
+      btn.textContent = 'Submit to Reece';
+    });
+  });
+
+  rooms.push({ id: uid('room'), name: '' });
+  devices.push({ id: uid('dev'), name: '', code: deviceCatalogue[0].code, location: '', roomId: '' });
+  users.push({ id: uid('usr'), name: '', role: '', deviceId: '', headset: headsetTypes[0], roaming: false });
+  groups.push({ id: uid('grp'), name: '', members: {} });
+  renderRooms();
+  renderDevices();
+  renderUsers();
+  renderGroups();
+  renderMisc();
+})();
+</script>
+</body>
+</html>
