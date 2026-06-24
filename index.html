@@ -354,7 +354,7 @@
 (function() {
   // ---- CONFIG ----
   // Bump this string each time you upload a new version, so it's visible on the page.
-  var PLANNER_VERSION = "v1.2";
+  var PLANNER_VERSION = "v1.3";
   // Replace this with your real Formspree endpoint, e.g. "https://formspree.io/f/abcd1234"
   var FORMSPREE_ENDPOINT = "https://formspree.io/f/mbdvddvk";
 
@@ -445,6 +445,21 @@
 
   function uid(prefix) { return prefix + '-' + (Date.now() + Math.random()).toString(36); }
   function escapeAttr(s) { return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+  // Pads a string with spaces to a fixed width for plain-text column alignment.
+  // Truncates with an ellipsis if the content is longer than the column width.
+  function padCol(text, width) {
+    var s = String(text || '');
+    if (s.length > width) return s.slice(0, width - 1) + '\u2026';
+    return s + ' '.repeat(width - s.length);
+  }
+  // Builds one aligned table row. Rows are prefixed with a zero-width marker
+  // (\u200B) so the PDF renderer can detect them and switch to a monospace
+  // font, since fixed-width column padding only lines up visually in a
+  // monospace typeface — Helvetica (used for prose) is proportional and would
+  // misalign the same padded text.
+  function tableRow(cols) {
+    return '\u200B' + cols.map(function(c) { return padCol(c.text, c.width); }).join('');
+  }
   function isWirelessCode(code) { return code === '55300-311'; }
   function isStationCode(code) { return STATION_CODES.indexOf(code) !== -1; }
 
@@ -984,12 +999,21 @@
     });
 
     out += '\nDEVICES (' + devices.length + ')\n';
-    if (devices.length === 0) out += '  none listed\n';
-    devices.forEach(function(d) {
-      out += '  - ' + (d.name || 'Unnamed') + '  |  ' + deviceLabel(d.code) + ' (' + d.code + ')' +
-        '  |  room: ' + (roomName(d.roomId) || 'not assigned') +
-        (d.location ? '  |  ' + d.location : '') + '\n';
-    });
+    if (devices.length === 0) {
+      out += '  none listed\n';
+    } else {
+      out += tableRow([{ text: 'Name', width: 18 }, { text: 'Type', width: 26 }, { text: 'I-Code', width: 12 }, { text: 'Room', width: 16 }, { text: 'Spot', width: 18 }]) + '\n';
+      out += '-'.repeat(90) + '\n';
+      devices.forEach(function(d) {
+        out += tableRow([
+          { text: d.name || 'Unnamed', width: 18 },
+          { text: deviceLabel(d.code), width: 26 },
+          { text: d.code, width: 12 },
+          { text: roomName(d.roomId) || 'not assigned', width: 16 },
+          { text: d.location || '-', width: 18 }
+        ]) + '\n';
+      });
+    }
 
     out += '\nANTENNA COVERAGE (calculated)\n';
     if (antennaPlan.length === 0) {
@@ -1007,13 +1031,23 @@
     out += '  -> ' + batteryPlan.chargers + ' x ' + CHARGER_PSU.label + ' (' + CHARGER_PSU.code + ')\n';
 
     out += '\nUSERS (' + users.length + ')\n';
-    if (users.length === 0) out += '  none listed\n';
-    users.forEach(function(u) {
-      var dev = devices.find(function(x) { return x.id === u.deviceId; });
-      var wireless = dev && isWirelessCode(dev.code);
-      out += '  - ' + (u.name || 'Unnamed') + '  |  ' + (u.role || 'role not given') + '  |  device: ' + deviceName(u.deviceId) +
-        '  |  headset: ' + (u.headset || 'not given') + (wireless ? '  |  roaming: ' + (u.roaming ? 'yes' : 'no') : '') + '\n';
-    });
+    if (users.length === 0) {
+      out += '  none listed\n';
+    } else {
+      out += tableRow([{ text: 'Name', width: 16 }, { text: 'Role', width: 20 }, { text: 'Device', width: 16 }, { text: 'Headset', width: 13 }, { text: 'Roaming', width: 8 }]) + '\n';
+      out += '-'.repeat(73) + '\n';
+      users.forEach(function(u) {
+        var dev = devices.find(function(x) { return x.id === u.deviceId; });
+        var wireless = dev && isWirelessCode(dev.code);
+        out += tableRow([
+          { text: u.name || 'Unnamed', width: 16 },
+          { text: u.role || 'role not given', width: 20 },
+          { text: deviceName(u.deviceId), width: 16 },
+          { text: u.headset || 'not given', width: 13 },
+          { text: wireless ? (u.roaming ? 'yes' : 'no') : '-', width: 8 }
+        ]) + '\n';
+      });
+    }
 
     out += '\nGROUPS (' + groups.length + ')\n';
     if (groups.length === 0) out += '  none listed\n';
@@ -1056,8 +1090,14 @@
     if (miscItems.length === 0) {
       out += '  none added\n';
     } else {
+      out += tableRow([{ text: 'Item', width: 32 }, { text: 'I-Code', width: 12 }, { text: 'Qty', width: 6 }]) + '\n';
+      out += '-'.repeat(50) + '\n';
       miscItems.forEach(function(m) {
-        out += '  - ' + miscLabel(m.code) + ' (' + m.code + ')  x ' + m.qty + '\n';
+        out += tableRow([
+          { text: miscLabel(m.code), width: 32 },
+          { text: m.code, width: 12 },
+          { text: String(m.qty), width: 6 }
+        ]) + '\n';
       });
     }
 
@@ -1083,8 +1123,14 @@
     if (codes.length === 0) {
       out += '  (no items yet)\n';
     } else {
+      out += tableRow([{ text: 'I-Code', width: 12 }, { text: 'Item', width: 34 }, { text: 'Qty', width: 6 }]) + '\n';
+      out += '-'.repeat(52) + '\n';
       codes.forEach(function(c) {
-        out += '  ' + c + '\t' + tally[c].label + '\t qty: ' + tally[c].qty + '\n';
+        out += tableRow([
+          { text: c, width: 12 },
+          { text: tally[c].label, width: 34 },
+          { text: String(tally[c].qty), width: 6 }
+        ]) + '\n';
       });
     }
 
@@ -1092,7 +1138,7 @@
   }
 
   document.getElementById('export-btn').addEventListener('click', function() {
-    lastSummaryText = buildSummary();
+    lastSummaryText = buildSummary().replace(/\u200B/g, '');
     document.getElementById('summary-text').textContent = lastSummaryText;
     document.getElementById('summary-output').style.display = 'block';
     document.getElementById('summary-output').scrollIntoView({ behavior: 'smooth' });
@@ -1140,15 +1186,30 @@
       doc.line(margin, y - 10, pageWidth - margin, y - 10);
     }
     function body(text) {
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10.5);
-      doc.setTextColor(28, 28, 26);
       var maxWidth = pageWidth - margin * 2;
-      var lines = doc.splitTextToSize(text, maxWidth);
-      lines.forEach(function(line) {
-        ensureSpace(lineHeight);
-        doc.text(line, margin, y);
-        y += lineHeight;
+      var rawLines = text.split('\n');
+      rawLines.forEach(function(rawLine) {
+        if (rawLine.charAt(0) === '\u200B') {
+          // Table row — render as-is in monospace so column padding stays aligned.
+          var tableLine = rawLine.slice(1);
+          doc.setFont('courier', 'normal');
+          doc.setFontSize(8.5);
+          doc.setTextColor(28, 28, 26);
+          ensureSpace(lineHeight);
+          doc.text(tableLine, margin, y);
+          y += lineHeight;
+        } else {
+          // Regular prose — proportional font, word-wrapped to the page width.
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(10.5);
+          doc.setTextColor(28, 28, 26);
+          var wrapped = doc.splitTextToSize(rawLine, maxWidth);
+          wrapped.forEach(function(line) {
+            ensureSpace(lineHeight);
+            doc.text(line, margin, y);
+            y += lineHeight;
+          });
+        }
       });
     }
     function spacer(extra) { y += (extra || 8); }
