@@ -131,6 +131,7 @@
   .conditional { display: none; flex-direction: column; gap: 10px; }
   .conditional.show { display: flex; }
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 28px; }
+  .top-fields { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 28px; }
   .user-extra { display: flex; align-items: center; gap: 16px; padding-left: 2px; margin-top: 6px; font-size: 12.5px; color: var(--muted); }
   .user-extra select { width: auto; height: 30px; font-size: 12.5px; padding: 4px 8px; }
   .group-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 12px; }
@@ -165,6 +166,7 @@
     .row-users-top { grid-template-columns: 1fr; }
     .row-links { grid-template-columns: 1fr; }
     .two-col { grid-template-columns: 1fr; }
+    .top-fields { grid-template-columns: 1fr; }
   }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -180,7 +182,11 @@
   <h1>Green-GO system planner</h1>
   <p class="sub">Fill in who needs to talk to who. No tech knowledge needed — leave anything blank if you're not sure. When you're done, hit submit at the bottom and it'll land straight in Reece's inbox.</p>
 
-  <div class="two-col">
+  <div class="top-fields">
+    <div>
+      <label for="job-number">Job number</label>
+      <input type="text" id="job-number" placeholder="e.g. J-10234">
+    </div>
     <div>
       <label for="show-name">Show / event name</label>
       <input type="text" id="show-name" placeholder="e.g. Riverside Festival 2026">
@@ -348,7 +354,7 @@
 (function() {
   // ---- CONFIG ----
   // Bump this string each time you upload a new version, so it's visible on the page.
-  var PLANNER_VERSION = "v1.0";
+  var PLANNER_VERSION = "v1.1";
   // Replace this with your real Formspree endpoint, e.g. "https://formspree.io/f/abcd1234"
   var FORMSPREE_ENDPOINT = "https://formspree.io/f/mbdvddvk";
 
@@ -879,6 +885,7 @@
   var lastSummaryText = '';
 
   function buildSummary() {
+    var jobNumber = document.getElementById('job-number').value || '(not given)';
     var showName = document.getElementById('show-name').value || '(untitled)';
     var filledBy = document.getElementById('filled-by').value || '(not given)';
     var pgmYes = document.getElementById('pgm-yes').checked;
@@ -909,6 +916,7 @@
     var batteryPlan = calculateBatteryPlan();
 
     var out = 'GREEN-GO SYSTEM PLANNER (' + PLANNER_VERSION + ')\n';
+    out += 'Job number: ' + jobNumber + '\n';
     out += 'Show / event: ' + showName + '\n';
     out += 'Filled in by: ' + filledBy + '\n';
 
@@ -1110,11 +1118,14 @@
     doc.text('4wall Entertainment — comms build sheet — ' + PLANNER_VERSION, margin + 70, y + 40);
     y += 80;
 
+    var jobNumber = document.getElementById('job-number').value || '(not given)';
     var showName = document.getElementById('show-name').value || '(untitled)';
     var filledBy = document.getElementById('filled-by').value || '(not given)';
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10.5);
     doc.setTextColor(28, 28, 26);
+    doc.text('Job number: ' + jobNumber, margin, y);
+    y += lineHeight;
     doc.text('Show / event: ' + showName, margin, y);
     y += lineHeight;
     doc.text('Filled in by: ' + filledBy, margin, y);
@@ -1188,12 +1199,13 @@
     btn.textContent = 'Submitting...';
     statusEl.className = '';
     statusEl.textContent = '';
+    var jobNumber = document.getElementById('job-number').value || '';
     var showName = document.getElementById('show-name').value || '(untitled)';
     fetch(FORMSPREE_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify({
-        subject: 'Green-GO planner: ' + showName,
+        subject: 'Green-GO planner: ' + (jobNumber ? jobNumber + ' — ' : '') + showName,
         summary: lastSummaryText
       })
     }).then(function(res) {
