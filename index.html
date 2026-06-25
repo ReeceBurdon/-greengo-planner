@@ -170,6 +170,7 @@
   }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -354,60 +355,11 @@
 (function() {
   // ---- CONFIG ----
   // Bump this string each time you upload a new version, so it's visible on the page.
-  var PLANNER_VERSION = "v1.3";
+  var PLANNER_VERSION = "v2.0";
   // Replace this with your real Formspree endpoint, e.g. "https://formspree.io/f/abcd1234"
   var FORMSPREE_ENDPOINT = "https://formspree.io/f/mbdvddvk";
 
   document.getElementById('version-tag').textContent = PLANNER_VERSION;
-
-  // Shared section headings used by buildSummary()'s output — used to split
-  // the plain-text summary into sections for both the PDF and the Formspree fields.
-  var KNOWN_HEADINGS = [
-    'ROOMS / ZONES', 'DEVICES', 'ANTENNA COVERAGE', 'BATTERIES & CHARGERS',
-    'USERS', 'GROUPS', 'PROGRAM AUDIO', 'RADIO INTEGRATION', 'MISC / INTERFACES', 'KIT LIST'
-  ];
-  // Maps a heading string to a short, email-friendly field key.
-  var HEADING_FIELD_KEYS = {
-    'ROOMS / ZONES': 'rooms',
-    'DEVICES': 'devices',
-    'ANTENNA COVERAGE': 'antenna_coverage',
-    'BATTERIES & CHARGERS': 'batteries_chargers',
-    'USERS': 'users',
-    'GROUPS': 'groups',
-    'PROGRAM AUDIO': 'program_audio',
-    'RADIO INTEGRATION': 'radio_integration',
-    'MISC / INTERFACES': 'misc_interfaces',
-    'KIT LIST': 'kit_list'
-  };
-
-  // Splits buildSummary()'s plain-text output into one string per section,
-  // keyed by the short field names in HEADING_FIELD_KEYS.
-  function splitSummaryIntoFields(raw) {
-    var fields = {};
-    var allLines = raw.split('\n');
-    var currentKey = null;
-    var currentBody = [];
-
-    function flush() {
-      if (currentKey) {
-        fields[currentKey] = currentBody.join('\n').trim() || '(none)';
-      }
-      currentKey = null;
-      currentBody = [];
-    }
-
-    allLines.forEach(function(line) {
-      var matchedHeading = KNOWN_HEADINGS.find(function(h) { return line.indexOf(h) === 0; });
-      if (matchedHeading) {
-        flush();
-        currentKey = HEADING_FIELD_KEYS[matchedHeading];
-      } else if (currentKey) {
-        currentBody.push(line);
-      }
-    });
-    flush();
-    return fields;
-  }
 
   var deviceCatalogue = [
     { label: "Desk station (8ch)", code: "55300-011" },
@@ -948,7 +900,11 @@
 
   var lastSummaryText = '';
 
-  function buildSummary() {
+  // Single source of truth: gathers every section of the plan into a plain
+  // JS object. buildSummary() (plain text) and buildPdf() (real PDF tables)
+  // both format this same data independently, so the underlying numbers can
+  // never drift between the two outputs.
+  function gatherPlanData() {
     var jobNumber = document.getElementById('job-number').value || '(not given)';
     var showName = document.getElementById('show-name').value || '(untitled)';
     var filledBy = document.getElementById('filled-by').value || '(not given)';
@@ -979,129 +935,53 @@
     var antennaPlan = calculateAntennaPlan();
     var batteryPlan = calculateBatteryPlan();
 
-    var out = 'GREEN-GO SYSTEM PLANNER (' + PLANNER_VERSION + ')\n';
-    out += 'Job number: ' + jobNumber + '\n';
-    out += 'Show / event: ' + showName + '\n';
-    out += 'Filled in by: ' + filledBy + '\n';
-
-    out += '\nROOMS / ZONES (' + rooms.length + ')\n';
-    if (rooms.length === 0) out += '  none listed\n';
-    rooms.forEach(function(r) {
+    var roomRows = rooms.map(function(r) {
       var devicesInRoom = devices.filter(function(d) { return d.roomId === r.id; });
       var wirelessCount = devicesInRoom.filter(function(d) { return isWirelessCode(d.code); }).length;
-      out += '  - ' + (r.name || 'Unnamed') + '  (' + devicesInRoom.length + ' device(s), ' + wirelessCount + ' wireless)\n';
+      return { name: r.name || 'Unnamed', deviceCount: devicesInRoom.length, wirelessCount: wirelessCount };
     });
-    out += '\n  Room-to-room links: ' + (links.length === 0 ? 'None required' : links.length) + '\n';
-    links.forEach(function(l) {
+
+    var linkRows = links.map(function(l) {
       var methodLabel = l.method === 'Other' ? ('Other - ' + (l.methodOther || 'not specified')) : (l.method || 'not specified');
-      out += '    ' + (roomName(l.roomAId) || 'not specified') + ' <-> ' + (roomName(l.roomBId) || 'not specified') +
-        '  via ' + methodLabel + '\n';
+      return { roomA: roomName(l.roomAId) || 'not specified', roomB: roomName(l.roomBId) || 'not specified', method: methodLabel };
     });
 
-    out += '\nDEVICES (' + devices.length + ')\n';
-    if (devices.length === 0) {
-      out += '  none listed\n';
-    } else {
-      out += tableRow([{ text: 'Name', width: 18 }, { text: 'Type', width: 26 }, { text: 'I-Code', width: 12 }, { text: 'Room', width: 16 }, { text: 'Spot', width: 18 }]) + '\n';
-      out += '-'.repeat(90) + '\n';
-      devices.forEach(function(d) {
-        out += tableRow([
-          { text: d.name || 'Unnamed', width: 18 },
-          { text: deviceLabel(d.code), width: 26 },
-          { text: d.code, width: 12 },
-          { text: roomName(d.roomId) || 'not assigned', width: 16 },
-          { text: d.location || '-', width: 18 }
-        ]) + '\n';
-      });
-    }
+    var deviceRows = devices.map(function(d) {
+      return {
+        name: d.name || 'Unnamed', type: deviceLabel(d.code), code: d.code,
+        room: roomName(d.roomId) || 'not assigned', spot: d.location || '-'
+      };
+    });
 
-    out += '\nANTENNA COVERAGE (calculated)\n';
-    if (antennaPlan.length === 0) {
-      out += '  No wireless beltpacks assigned to rooms yet\n';
-    } else {
-      antennaPlan.forEach(function(p) {
-        out += '  - ' + p.room + ': ' + p.packCount + ' wireless pack(s), ' + (p.roaming ? 'roaming user present' : 'no roaming') +
-          ' -> ' + p.count + ' x ' + p.antenna.label + ' (' + p.antenna.code + ')\n';
-      });
-    }
+    var antennaRows = antennaPlan.map(function(p) {
+      return {
+        room: p.room, packCount: p.packCount, roaming: p.roaming,
+        antennaLabel: p.antenna.label, antennaCode: p.antenna.code, count: p.count
+      };
+    });
 
-    out += '\nBATTERIES & CHARGERS (calculated)\n';
-    out += '  ' + batteryPlan.base + ' wireless pack(s) + ' + batteryPlan.spares + ' spare(s) = ' + batteryPlan.total + ' batteries\n';
-    out += '  -> ' + batteryPlan.chargers + ' x ' + CHARGER.label + ' (' + CHARGER.code + ')\n';
-    out += '  -> ' + batteryPlan.chargers + ' x ' + CHARGER_PSU.label + ' (' + CHARGER_PSU.code + ')\n';
+    var userRows = users.map(function(u) {
+      var dev = devices.find(function(x) { return x.id === u.deviceId; });
+      var wireless = dev && isWirelessCode(dev.code);
+      return {
+        name: u.name || 'Unnamed', role: u.role || 'role not given', device: deviceName(u.deviceId),
+        headset: u.headset || 'not given', roaming: wireless ? (u.roaming ? 'yes' : 'no') : '-'
+      };
+    });
 
-    out += '\nUSERS (' + users.length + ')\n';
-    if (users.length === 0) {
-      out += '  none listed\n';
-    } else {
-      out += tableRow([{ text: 'Name', width: 16 }, { text: 'Role', width: 20 }, { text: 'Device', width: 16 }, { text: 'Headset', width: 13 }, { text: 'Roaming', width: 8 }]) + '\n';
-      out += '-'.repeat(73) + '\n';
-      users.forEach(function(u) {
-        var dev = devices.find(function(x) { return x.id === u.deviceId; });
-        var wireless = dev && isWirelessCode(dev.code);
-        out += tableRow([
-          { text: u.name || 'Unnamed', width: 16 },
-          { text: u.role || 'role not given', width: 20 },
-          { text: deviceName(u.deviceId), width: 16 },
-          { text: u.headset || 'not given', width: 13 },
-          { text: wireless ? (u.roaming ? 'yes' : 'no') : '-', width: 8 }
-        ]) + '\n';
-      });
-    }
-
-    out += '\nGROUPS (' + groups.length + ')\n';
-    if (groups.length === 0) out += '  none listed\n';
-    groups.forEach(function(g) {
-      out += '  - ' + (g.name || 'Unnamed group') + '\n';
+    var groupRows = groups.map(function(g) {
       var memberIds = Object.keys(g.members).filter(function(uidKey) { return g.members[uidKey].in; });
-      if (memberIds.length === 0) {
-        out += '      (no members assigned)\n';
-      } else {
-        memberIds.forEach(function(uidKey) {
-          var u = users.find(function(x) { return x.id === uidKey; });
-          var perm = g.members[uidKey].perm === 'listen' ? 'listen only' : 'talk + listen';
-          out += '      ' + (u ? (u.name || 'Unnamed') : 'Unknown user') + ' - ' + perm + '\n';
-        });
-      }
-      var spanRooms = roomsForGroup(g);
-      if (spanRooms.length > 1) {
-        out += '      [cross-room talk link: ' + spanRooms.join(' <-> ') + ']\n';
-      }
+      var members = memberIds.map(function(uidKey) {
+        var u = users.find(function(x) { return x.id === uidKey; });
+        return { name: u ? (u.name || 'Unnamed') : 'Unknown user', perm: g.members[uidKey].perm === 'listen' ? 'listen only' : 'talk + listen' };
+      });
+      return { name: g.name || 'Unnamed group', members: members, crossRoom: roomsForGroup(g) };
     });
 
-    out += '\nPROGRAM AUDIO\n';
-    if (pgmYes) {
-      out += '  Source: ' + (pgmSource || 'not specified') + '\n';
-      out += '  Routed to: ' + (pgmGroupNames.length > 0 ? pgmGroupNames.join(', ') : 'not specified') + '\n';
-    } else {
-      out += '  Not required\n';
-    }
+    var miscRows = miscItems.map(function(m) {
+      return { item: miscLabel(m.code), code: m.code, qty: m.qty };
+    });
 
-    out += '\nRADIO INTEGRATION\n';
-    if (radioYes) {
-      out += '  Radio model: ' + (radioModel || 'not specified') + '\n';
-      out += '  Supplied by: ' + (radioSupplier || 'not specified') + '\n';
-      out += '  Requires: GREEN GO RDX RADIO INTERFACE (' + RDX_CODE + ')\n';
-    } else {
-      out += '  Not required\n';
-    }
-
-    out += '\nMISC / INTERFACES\n';
-    if (miscItems.length === 0) {
-      out += '  none added\n';
-    } else {
-      out += tableRow([{ text: 'Item', width: 32 }, { text: 'I-Code', width: 12 }, { text: 'Qty', width: 6 }]) + '\n';
-      out += '-'.repeat(50) + '\n';
-      miscItems.forEach(function(m) {
-        out += tableRow([
-          { text: miscLabel(m.code), width: 32 },
-          { text: m.code, width: 12 },
-          { text: String(m.qty), width: 6 }
-        ]) + '\n';
-      });
-    }
-
-    out += '\nKIT LIST (I-Code / item / qty)\n';
     var tally = {};
     function add(code, label, qty) {
       if (!tally[code]) tally[code] = { label: label, qty: 0 };
@@ -1119,18 +999,132 @@
     }
     if (radioYes) add(RDX_CODE, 'RDX Radio Interface', 1);
     miscItems.forEach(function(m) { add(m.code, miscLabel(m.code), m.qty); });
-    var codes = Object.keys(tally).sort();
-    if (codes.length === 0) {
+    var kitRows = Object.keys(tally).sort().map(function(c) {
+      return { code: c, item: tally[c].label, qty: tally[c].qty };
+    });
+
+    return {
+      jobNumber: jobNumber, showName: showName, filledBy: filledBy,
+      rooms: roomRows, links: linkRows, devices: deviceRows,
+      antenna: antennaRows, battery: batteryPlan,
+      users: userRows, groups: groupRows,
+      programAudio: { needed: pgmYes, source: pgmSource, groups: pgmGroupNames },
+      radio: { needed: radioYes, model: radioModel, supplier: radioSupplier },
+      misc: miscRows, kit: kitRows
+    };
+  }
+
+  function buildSummary() {
+    var d = gatherPlanData();
+
+    var out = 'GREEN-GO SYSTEM PLANNER (' + PLANNER_VERSION + ')\n';
+    out += 'Job number: ' + d.jobNumber + '\n';
+    out += 'Show / event: ' + d.showName + '\n';
+    out += 'Filled in by: ' + d.filledBy + '\n';
+
+    out += '\nROOMS / ZONES (' + d.rooms.length + ')\n';
+    if (d.rooms.length === 0) out += '  none listed\n';
+    d.rooms.forEach(function(r) {
+      out += '  - ' + r.name + '  (' + r.deviceCount + ' device(s), ' + r.wirelessCount + ' wireless)\n';
+    });
+    out += '\n  Room-to-room links: ' + (d.links.length === 0 ? 'None required' : d.links.length) + '\n';
+    d.links.forEach(function(l) {
+      out += '    ' + l.roomA + ' <-> ' + l.roomB + '  via ' + l.method + '\n';
+    });
+
+    out += '\nDEVICES (' + d.devices.length + ')\n';
+    if (d.devices.length === 0) {
+      out += '  none listed\n';
+    } else {
+      out += tableRow([{ text: 'Name', width: 18 }, { text: 'Type', width: 26 }, { text: 'I-Code', width: 12 }, { text: 'Room', width: 16 }, { text: 'Spot', width: 18 }]) + '\n';
+      out += '-'.repeat(90) + '\n';
+      d.devices.forEach(function(row) {
+        out += tableRow([
+          { text: row.name, width: 18 }, { text: row.type, width: 26 }, { text: row.code, width: 12 },
+          { text: row.room, width: 16 }, { text: row.spot, width: 18 }
+        ]) + '\n';
+      });
+    }
+
+    out += '\nANTENNA COVERAGE (calculated)\n';
+    if (d.antenna.length === 0) {
+      out += '  No wireless beltpacks assigned to rooms yet\n';
+    } else {
+      d.antenna.forEach(function(p) {
+        out += '  - ' + p.room + ': ' + p.packCount + ' wireless pack(s), ' + (p.roaming ? 'roaming user present' : 'no roaming') +
+          ' -> ' + p.count + ' x ' + p.antennaLabel + ' (' + p.antennaCode + ')\n';
+      });
+    }
+
+    out += '\nBATTERIES & CHARGERS (calculated)\n';
+    out += '  ' + d.battery.base + ' wireless pack(s) + ' + d.battery.spares + ' spare(s) = ' + d.battery.total + ' batteries\n';
+    out += '  -> ' + d.battery.chargers + ' x ' + CHARGER.label + ' (' + CHARGER.code + ')\n';
+    out += '  -> ' + d.battery.chargers + ' x ' + CHARGER_PSU.label + ' (' + CHARGER_PSU.code + ')\n';
+
+    out += '\nUSERS (' + d.users.length + ')\n';
+    if (d.users.length === 0) {
+      out += '  none listed\n';
+    } else {
+      out += tableRow([{ text: 'Name', width: 16 }, { text: 'Role', width: 20 }, { text: 'Device', width: 16 }, { text: 'Headset', width: 13 }, { text: 'Roaming', width: 8 }]) + '\n';
+      out += '-'.repeat(73) + '\n';
+      d.users.forEach(function(row) {
+        out += tableRow([
+          { text: row.name, width: 16 }, { text: row.role, width: 20 }, { text: row.device, width: 16 },
+          { text: row.headset, width: 13 }, { text: row.roaming, width: 8 }
+        ]) + '\n';
+      });
+    }
+
+    out += '\nGROUPS (' + d.groups.length + ')\n';
+    if (d.groups.length === 0) out += '  none listed\n';
+    d.groups.forEach(function(g) {
+      out += '  - ' + g.name + '\n';
+      if (g.members.length === 0) {
+        out += '      (no members assigned)\n';
+      } else {
+        g.members.forEach(function(m) { out += '      ' + m.name + ' - ' + m.perm + '\n'; });
+      }
+      if (g.crossRoom.length > 1) {
+        out += '      [cross-room talk link: ' + g.crossRoom.join(' <-> ') + ']\n';
+      }
+    });
+
+    out += '\nPROGRAM AUDIO\n';
+    if (d.programAudio.needed) {
+      out += '  Source: ' + (d.programAudio.source || 'not specified') + '\n';
+      out += '  Routed to: ' + (d.programAudio.groups.length > 0 ? d.programAudio.groups.join(', ') : 'not specified') + '\n';
+    } else {
+      out += '  Not required\n';
+    }
+
+    out += '\nRADIO INTEGRATION\n';
+    if (d.radio.needed) {
+      out += '  Radio model: ' + (d.radio.model || 'not specified') + '\n';
+      out += '  Supplied by: ' + (d.radio.supplier || 'not specified') + '\n';
+      out += '  Requires: GREEN GO RDX RADIO INTERFACE (' + RDX_CODE + ')\n';
+    } else {
+      out += '  Not required\n';
+    }
+
+    out += '\nMISC / INTERFACES\n';
+    if (d.misc.length === 0) {
+      out += '  none added\n';
+    } else {
+      out += tableRow([{ text: 'Item', width: 32 }, { text: 'I-Code', width: 12 }, { text: 'Qty', width: 6 }]) + '\n';
+      out += '-'.repeat(50) + '\n';
+      d.misc.forEach(function(row) {
+        out += tableRow([{ text: row.item, width: 32 }, { text: row.code, width: 12 }, { text: String(row.qty), width: 6 }]) + '\n';
+      });
+    }
+
+    out += '\nKIT LIST (I-Code / item / qty)\n';
+    if (d.kit.length === 0) {
       out += '  (no items yet)\n';
     } else {
       out += tableRow([{ text: 'I-Code', width: 12 }, { text: 'Item', width: 34 }, { text: 'Qty', width: 6 }]) + '\n';
       out += '-'.repeat(52) + '\n';
-      codes.forEach(function(c) {
-        out += tableRow([
-          { text: c, width: 12 },
-          { text: tally[c].label, width: 34 },
-          { text: String(tally[c].qty), width: 6 }
-        ]) + '\n';
+      d.kit.forEach(function(row) {
+        out += tableRow([{ text: row.code, width: 12 }, { text: row.item, width: 34 }, { text: String(row.qty), width: 6 }]) + '\n';
       });
     }
 
@@ -1158,128 +1152,252 @@
 
   function buildPdf() {
     var jsPDFCtor = window.jspdf && window.jspdf.jsPDF;
-    if (!jsPDFCtor) {
+    if (!jsPDFCtor || !jsPDFCtor.API || !jsPDFCtor.API.autoTable) {
       alert('PDF library failed to load — check your internet connection and try again.');
       return null;
     }
     var doc = new jsPDFCtor({ unit: 'pt', format: 'a4' });
     var pageWidth = doc.internal.pageSize.getWidth();
     var pageHeight = doc.internal.pageSize.getHeight();
-    var margin = 48;
+    var margin = 40;
+    var contentWidth = pageWidth - margin * 2;
     var y = margin;
-    var lineHeight = 14;
+
+    var GREEN = [31, 96, 56];
+    var INK = [28, 28, 26];
+    var MUTED = [107, 107, 99];
+    var BORDER = [227, 223, 211];
+    var PAPER = [250, 248, 243];
 
     function ensureSpace(extra) {
-      if (y + extra > pageHeight - margin) {
+      if (y + extra > pageHeight - 50) {
         doc.addPage();
         y = margin;
       }
     }
-    function heading(text) {
-      ensureSpace(24);
+    function sectionHeading(text) {
+      ensureSpace(26);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(13);
-      doc.setTextColor(31, 96, 56);
-      doc.text(text, margin, y);
-      y += 18;
-      doc.setDrawColor(227, 223, 211);
-      doc.line(margin, y - 10, pageWidth - margin, y - 10);
+      doc.setFontSize(12.5);
+      doc.setTextColor(GREEN[0], GREEN[1], GREEN[2]);
+      doc.text(text.toUpperCase(), margin, y);
+      y += 8;
+      doc.setDrawColor(GREEN[0], GREEN[1], GREEN[2]);
+      doc.setLineWidth(1.2);
+      doc.line(margin, y, margin + 28, y);
+      y += 14;
     }
-    function body(text) {
-      var maxWidth = pageWidth - margin * 2;
-      var rawLines = text.split('\n');
-      rawLines.forEach(function(rawLine) {
-        if (rawLine.charAt(0) === '\u200B') {
-          // Table row — render as-is in monospace so column padding stays aligned.
-          var tableLine = rawLine.slice(1);
-          doc.setFont('courier', 'normal');
-          doc.setFontSize(8.5);
-          doc.setTextColor(28, 28, 26);
-          ensureSpace(lineHeight);
-          doc.text(tableLine, margin, y);
-          y += lineHeight;
-        } else {
-          // Regular prose — proportional font, word-wrapped to the page width.
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(10.5);
-          doc.setTextColor(28, 28, 26);
-          var wrapped = doc.splitTextToSize(rawLine, maxWidth);
-          wrapped.forEach(function(line) {
-            ensureSpace(lineHeight);
-            doc.text(line, margin, y);
-            y += lineHeight;
-          });
-        }
+    function prose(text, opts) {
+      opts = opts || {};
+      doc.setFont('helvetica', opts.bold ? 'bold' : 'normal');
+      doc.setFontSize(opts.size || 10);
+      var c = opts.color || INK;
+      doc.setTextColor(c[0], c[1], c[2]);
+      var lines = doc.splitTextToSize(text, contentWidth);
+      lines.forEach(function(line) {
+        ensureSpace(13);
+        doc.text(line, margin, y);
+        y += opts.lineHeight || 13;
       });
     }
     function spacer(extra) { y += (extra || 8); }
 
-    // Header: logo + title block
-    try {
-      doc.addImage(LOGO_DATA_URI, 'PNG', margin, y, 56, 60);
-    } catch (e) {}
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(18);
-    doc.setTextColor(28, 28, 26);
-    doc.text('Green-GO system planner', margin + 70, y + 24);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(107, 107, 99);
-    doc.text('4wall Entertainment — comms build sheet — ' + PLANNER_VERSION, margin + 70, y + 40);
-    y += 80;
-
-    var jobNumber = document.getElementById('job-number').value || '(not given)';
-    var showName = document.getElementById('show-name').value || '(untitled)';
-    var filledBy = document.getElementById('filled-by').value || '(not given)';
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10.5);
-    doc.setTextColor(28, 28, 26);
-    doc.text('Job number: ' + jobNumber, margin, y);
-    y += lineHeight;
-    doc.text('Show / event: ' + showName, margin, y);
-    y += lineHeight;
-    doc.text('Filled in by: ' + filledBy, margin, y);
-    y += lineHeight + 6;
-
-    // Body content reuses the same plain-text summary, split into known sections
-    var raw = buildSummary();
-    var allLines = raw.split('\n');
-    var currentHeading = null;
-    var currentBody = [];
-
-    function flushSection() {
-      if (currentHeading) {
-        heading(currentHeading);
-        var bodyText = currentBody.join('\n').trim();
-        if (bodyText) body(bodyText);
-        spacer(10);
-      }
-      currentHeading = null;
-      currentBody = [];
+    // Renders a real ruled table via jspdf-autotable, keeping the document's
+    // visual style (green header row, subtle borders, alternating row tint).
+    function table(head, rows, columnStyles) {
+      doc.autoTable({
+        startY: y,
+        margin: { left: margin, right: margin },
+        head: [head],
+        body: rows,
+        theme: 'grid',
+        styles: { font: 'helvetica', fontSize: 9, textColor: INK, lineColor: BORDER, lineWidth: 0.5, cellPadding: 5 },
+        headStyles: { fillColor: GREEN, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+        alternateRowStyles: { fillColor: PAPER },
+        columnStyles: columnStyles || {},
+        didDrawPage: function() {
+          // autoTable can trigger its own page breaks; keep our cursor in sync.
+        }
+      });
+      y = doc.lastAutoTable.finalY + 16;
     }
 
-    allLines.forEach(function(line) {
-      var matchedHeading = KNOWN_HEADINGS.find(function(h) { return line.indexOf(h) === 0; });
-      if (matchedHeading) {
-        flushSection();
-        currentHeading = line;
-      } else if (currentHeading) {
-        currentBody.push(line);
-      }
-      // lines before the first known heading (title, show name, filled by) are skipped —
-      // already rendered manually above
-    });
-    flushSection();
+    var d = gatherPlanData();
 
-    // Footer contact details on every page
+    // ---- Header: logo + title block ----
+    try { doc.addImage(LOGO_DATA_URI, 'PNG', margin, y, 52, 56); } catch (e) {}
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(17);
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    doc.text('Green-GO system planner', margin + 66, y + 22);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+    doc.text('4wall Entertainment — comms build sheet — ' + PLANNER_VERSION, margin + 66, y + 37);
+    y += 70;
+
+    doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
+    doc.setLineWidth(0.75);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 16;
+
+    // ---- Job info row ----
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+    var colW = contentWidth / 3;
+    doc.text('JOB NUMBER', margin, y);
+    doc.text('SHOW / EVENT', margin + colW, y);
+    doc.text('FILLED IN BY', margin + colW * 2, y);
+    y += 13;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    doc.text(d.jobNumber, margin, y);
+    doc.text(d.showName, margin + colW, y);
+    doc.text(d.filledBy, margin + colW * 2, y);
+    y += 24;
+
+    // ---- Rooms / zones ----
+    sectionHeading('Rooms / zones');
+    if (d.rooms.length === 0) {
+      prose('No rooms listed.', { color: MUTED });
+    } else {
+      table(
+        ['Room', 'Devices', 'Wireless'],
+        d.rooms.map(function(r) { return [r.name, String(r.deviceCount), String(r.wirelessCount)]; }),
+        { 1: { halign: 'center', cellWidth: 80 }, 2: { halign: 'center', cellWidth: 80 } }
+      );
+    }
+    if (d.links.length > 0) {
+      prose('Room-to-room links:', { bold: true, size: 9.5 });
+      d.links.forEach(function(l) {
+        prose('  ' + l.roomA + '  \u2194  ' + l.roomB + '   via ' + l.method, { size: 9.5, color: MUTED });
+      });
+      spacer(6);
+    }
+
+    // ---- Devices ----
+    sectionHeading('Devices (' + d.devices.length + ')');
+    if (d.devices.length === 0) {
+      prose('No devices listed.', { color: MUTED });
+    } else {
+      table(
+        ['Name', 'Type', 'I-Code', 'Room', 'Spot'],
+        d.devices.map(function(r) { return [r.name, r.type, r.code, r.room, r.spot]; }),
+        { 2: { cellWidth: 70 } }
+      );
+    }
+
+    // ---- Antenna coverage ----
+    sectionHeading('Antenna coverage (calculated)');
+    if (d.antenna.length === 0) {
+      prose('No wireless beltpacks assigned to rooms yet.', { color: MUTED });
+    } else {
+      table(
+        ['Room', 'Packs', 'Roaming?', 'Antenna type', 'Qty needed'],
+        d.antenna.map(function(p) {
+          return [p.room, String(p.packCount), p.roaming ? 'Yes — Stride' : 'No — WAA fine', p.antennaLabel + ' (' + p.antennaCode + ')', String(p.count)];
+        }),
+        { 1: { halign: 'center', cellWidth: 50 }, 4: { halign: 'center', cellWidth: 70 } }
+      );
+    }
+
+    // ---- Batteries & chargers ----
+    sectionHeading('Batteries & chargers (calculated)');
+    prose(d.battery.base + ' wireless pack(s) + ' + d.battery.spares + ' spare(s) = ' + d.battery.total + ' batteries total', { size: 10 });
+    prose('\u2192 ' + d.battery.chargers + ' \u00d7 ' + CHARGER.label + ' (' + CHARGER.code + ')', { size: 9.5, color: MUTED });
+    prose('\u2192 ' + d.battery.chargers + ' \u00d7 ' + CHARGER_PSU.label + ' (' + CHARGER_PSU.code + ')', { size: 9.5, color: MUTED });
+    spacer(6);
+
+    // ---- Users ----
+    sectionHeading('Users (' + d.users.length + ')');
+    if (d.users.length === 0) {
+      prose('No users listed.', { color: MUTED });
+    } else {
+      table(
+        ['Name', 'Role', 'Device', 'Headset', 'Roaming?'],
+        d.users.map(function(r) { return [r.name, r.role, r.device, r.headset, r.roaming]; }),
+        { 4: { halign: 'center', cellWidth: 55 } }
+      );
+    }
+
+    // ---- Groups ----
+    sectionHeading('Groups (' + d.groups.length + ')');
+    if (d.groups.length === 0) {
+      prose('No groups listed.', { color: MUTED });
+    } else {
+      d.groups.forEach(function(g) {
+        ensureSpace(16);
+        prose(g.name, { bold: true, size: 10.5 });
+        if (g.members.length === 0) {
+          prose('  (no members assigned)', { size: 9.5, color: MUTED });
+        } else {
+          g.members.forEach(function(m) {
+            prose('  ' + m.name + '  \u2014  ' + m.perm, { size: 9.5 });
+          });
+        }
+        if (g.crossRoom.length > 1) {
+          prose('  Cross-room talk link: ' + g.crossRoom.join(' \u2194 '), { size: 9, color: GREEN });
+        }
+        spacer(6);
+      });
+    }
+
+    // ---- Program audio ----
+    sectionHeading('Program audio');
+    if (d.programAudio.needed) {
+      prose('Source: ' + (d.programAudio.source || 'not specified'), { size: 10 });
+      prose('Routed to: ' + (d.programAudio.groups.length > 0 ? d.programAudio.groups.join(', ') : 'not specified'), { size: 10 });
+    } else {
+      prose('Not required.', { color: MUTED });
+    }
+    spacer(6);
+
+    // ---- Radio integration ----
+    sectionHeading('Radio integration');
+    if (d.radio.needed) {
+      prose('Radio model: ' + (d.radio.model || 'not specified'), { size: 10 });
+      prose('Supplied by: ' + (d.radio.supplier || 'not specified'), { size: 10 });
+      prose('Requires: RDX Radio Interface (' + RDX_CODE + ')', { size: 9.5, color: MUTED });
+    } else {
+      prose('Not required.', { color: MUTED });
+    }
+    spacer(6);
+
+    // ---- Misc / interfaces ----
+    sectionHeading('Misc / interfaces');
+    if (d.misc.length === 0) {
+      prose('None added.', { color: MUTED });
+    } else {
+      table(
+        ['Item', 'I-Code', 'Qty'],
+        d.misc.map(function(r) { return [r.item, r.code, String(r.qty)]; }),
+        { 1: { cellWidth: 70 }, 2: { halign: 'center', cellWidth: 50 } }
+      );
+    }
+
+    // ---- Kit list ----
+    sectionHeading('Kit list');
+    if (d.kit.length === 0) {
+      prose('No items yet.', { color: MUTED });
+    } else {
+      table(
+        ['I-Code', 'Item', 'Qty'],
+        d.kit.map(function(r) { return [r.code, r.item, String(r.qty)]; }),
+        { 0: { cellWidth: 70 }, 2: { halign: 'center', cellWidth: 50 } }
+      );
+    }
+
+    // ---- Footer on every page ----
     var pageCount = doc.internal.getNumberOfPages();
     for (var i = 1; i <= pageCount; i++) {
       doc.setPage(i);
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      doc.setTextColor(107, 107, 99);
-      doc.text('Reece Burdon — 4wall Entertainment — rburdon@4wall.com', margin, pageHeight - 24);
-      doc.text(String(i) + ' / ' + pageCount, pageWidth - margin, pageHeight - 24, { align: 'right' });
+      doc.setFontSize(8.5);
+      doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+      doc.text('Reece Burdon — 4wall Entertainment — rburdon@4wall.com', margin, pageHeight - 22);
+      doc.text(String(i) + ' / ' + pageCount, pageWidth - margin, pageHeight - 22, { align: 'right' });
     }
 
     return doc;
@@ -1305,18 +1423,35 @@
     btn.textContent = 'Submitting...';
     statusEl.className = '';
     statusEl.textContent = '';
-    var jobNumber = document.getElementById('job-number').value || '(not given)';
-    var showName = document.getElementById('show-name').value || '(untitled)';
-    var filledBy = document.getElementById('filled-by').value || '(not given)';
-    var sectionFields = splitSummaryIntoFields(lastSummaryText);
+
+    var d = gatherPlanData();
+    var totalWirelessPacks = d.battery.base;
+    var totalAntennas = d.antenna.reduce(function(sum, p) { return sum + p.count; }, 0);
+    var kitLines = d.kit.map(function(r) { return r.code + '  ' + r.item + '  x' + r.qty; }).join('\n') || '(no items yet)';
+    var notableBits = [];
+    if (d.links.length > 0) notableBits.push(d.links.length + ' room-to-room link(s)');
+    if (d.radio.needed) notableBits.push('radio integration (' + (d.radio.model || 'model not given') + ')');
+    if (d.programAudio.needed) notableBits.push('program audio required');
+
     var payload = {
-      subject: 'Green-GO planner: ' + (jobNumber !== '(not given)' ? jobNumber + ' — ' : '') + showName,
+      subject: 'Green-GO planner: ' + (d.jobNumber !== '(not given)' ? d.jobNumber + ' — ' : '') + d.showName,
       planner_version: PLANNER_VERSION,
-      job_number: jobNumber,
-      show_event: showName,
-      filled_in_by: filledBy
+      job_number: d.jobNumber,
+      show_event: d.showName,
+      filled_in_by: d.filledBy,
+      at_a_glance:
+        d.rooms.length + ' room(s)  \u2022  ' +
+        d.devices.length + ' device(s)  \u2022  ' +
+        totalWirelessPacks + ' wireless pack(s)  \u2022  ' +
+        totalAntennas + ' antenna(s)  \u2022  ' +
+        d.battery.chargers + ' charger(s)  \u2022  ' +
+        d.users.length + ' user(s)  \u2022  ' +
+        d.groups.length + ' group(s)',
+      flags: notableBits.length > 0 ? notableBits.join(', ') : 'none',
+      kit_list: kitLines,
+      full_plan: 'Open the PDF download on the planner page for the full structured breakdown (devices, users, groups, antenna coverage, etc).'
     };
-    Object.keys(sectionFields).forEach(function(key) { payload[key] = sectionFields[key]; });
+
     fetch(FORMSPREE_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
