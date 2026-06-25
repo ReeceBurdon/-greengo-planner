@@ -355,7 +355,7 @@
 (function() {
   // ---- CONFIG ----
   // Bump this string each time you upload a new version, so it's visible on the page.
-  var PLANNER_VERSION = "v2.1";
+  var PLANNER_VERSION = "v2.2";
   // Replace this with your real Formspree endpoint, e.g. "https://formspree.io/f/abcd1234"
   var FORMSPREE_ENDPOINT = "https://formspree.io/f/mbdvddvk";
 
@@ -1175,8 +1175,23 @@
         y = margin;
       }
     }
-    function sectionHeading(text) {
-      ensureSpace(26);
+    // Starts a new section. estimatedContentHeight is a rough guess (in points)
+    // of how tall the section's body will be — used to decide whether the
+    // whole section fits in the remaining space on this page. If it doesn't,
+    // the section starts fresh on a new page instead of splitting partway
+    // through (e.g. heading + 2 table rows on one page, the rest on the next).
+    // This is a heuristic, not exact — autoTable can still split a genuinely
+    // long table across pages on its own, which is fine; this just avoids
+    // *short* sections getting awkwardly cut right after their heading.
+    function sectionHeading(text, estimatedContentHeight) {
+      var headingHeight = 26;
+      var totalEstimate = headingHeight + (estimatedContentHeight || 40);
+      if (y > margin && y + totalEstimate > pageHeight - 50) {
+        doc.addPage();
+        y = margin;
+      } else {
+        ensureSpace(headingHeight);
+      }
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12.5);
       doc.setTextColor(GREEN[0], GREEN[1], GREEN[2]);
@@ -1186,6 +1201,12 @@
       doc.setLineWidth(1.2);
       doc.line(margin, y, margin + 28, y);
       y += 14;
+    }
+    // Rough row-height estimate for a table with rowCount data rows, used to
+    // feed sectionHeading()'s look-ahead. ~20pt/row covers a 9pt font with
+    // cellPadding 5 plus the ~26pt header row.
+    function estimateTableHeight(rowCount) {
+      return 26 + Math.max(rowCount, 1) * 20;
     }
     function prose(text, opts) {
       opts = opts || {};
@@ -1259,7 +1280,7 @@
     y += 24;
 
     // ---- Rooms / zones ----
-    sectionHeading('Rooms / zones');
+    sectionHeading('Rooms / zones', estimateTableHeight(d.rooms.length) + (d.links.length > 0 ? (d.links.length + 1) * 13 + 14 : 0));
     if (d.rooms.length === 0) {
       prose('No rooms listed.', { color: MUTED });
     } else {
@@ -1278,7 +1299,7 @@
     }
 
     // ---- Devices ----
-    sectionHeading('Devices (' + d.devices.length + ')');
+    sectionHeading('Devices (' + d.devices.length + ')', estimateTableHeight(d.devices.length));
     if (d.devices.length === 0) {
       prose('No devices listed.', { color: MUTED });
     } else {
@@ -1290,7 +1311,7 @@
     }
 
     // ---- Antenna coverage ----
-    sectionHeading('Antenna coverage (calculated)');
+    sectionHeading('Antenna coverage (calculated)', estimateTableHeight(d.antenna.length));
     if (d.antenna.length === 0) {
       prose('No wireless beltpacks assigned to rooms yet.', { color: MUTED });
     } else {
@@ -1304,14 +1325,14 @@
     }
 
     // ---- Batteries & chargers ----
-    sectionHeading('Batteries & chargers (calculated)');
+    sectionHeading('Batteries & chargers (calculated)', 3 * 13 + 10);
     prose(d.battery.base + ' wireless pack(s) + ' + d.battery.spares + ' spare(s) = ' + d.battery.total + ' batteries total', { size: 10 });
     prose('\u2192 ' + d.battery.chargers + ' \u00d7 ' + CHARGER.label + ' (' + CHARGER.code + ')', { size: 9.5, color: MUTED });
     prose('\u2192 ' + d.battery.chargers + ' \u00d7 ' + CHARGER_PSU.label + ' (' + CHARGER_PSU.code + ')', { size: 9.5, color: MUTED });
     spacer(6);
 
     // ---- Users ----
-    sectionHeading('Users (' + d.users.length + ')');
+    sectionHeading('Users (' + d.users.length + ')', estimateTableHeight(d.users.length));
     if (d.users.length === 0) {
       prose('No users listed.', { color: MUTED });
     } else {
@@ -1323,7 +1344,8 @@
     }
 
     // ---- Groups ----
-    sectionHeading('Groups (' + d.groups.length + ')');
+    var totalGroupMemberRows = d.groups.reduce(function(sum, g) { return sum + Math.max(g.members.length, 1); }, 0);
+    sectionHeading('Groups (' + d.groups.length + ')', estimateTableHeight(totalGroupMemberRows));
     if (d.groups.length === 0) {
       prose('No groups listed.', { color: MUTED });
     } else {
@@ -1348,7 +1370,7 @@
     }
 
     // ---- Program audio ----
-    sectionHeading('Program audio');
+    sectionHeading('Program audio', d.programAudio.needed ? (2 * 13 + 10) : (13 + 10));
     if (d.programAudio.needed) {
       prose('Source: ' + (d.programAudio.source || 'not specified'), { size: 10 });
       prose('Routed to: ' + (d.programAudio.groups.length > 0 ? d.programAudio.groups.join(', ') : 'not specified'), { size: 10 });
@@ -1358,7 +1380,7 @@
     spacer(6);
 
     // ---- Radio integration ----
-    sectionHeading('Radio integration');
+    sectionHeading('Radio integration', d.radio.needed ? (3 * 13 + 10) : (13 + 10));
     if (d.radio.needed) {
       prose('Radio model: ' + (d.radio.model || 'not specified'), { size: 10 });
       prose('Supplied by: ' + (d.radio.supplier || 'not specified'), { size: 10 });
@@ -1369,7 +1391,7 @@
     spacer(6);
 
     // ---- Misc / interfaces ----
-    sectionHeading('Misc / interfaces');
+    sectionHeading('Misc / interfaces', estimateTableHeight(d.misc.length));
     if (d.misc.length === 0) {
       prose('None added.', { color: MUTED });
     } else {
@@ -1381,7 +1403,7 @@
     }
 
     // ---- Kit list ----
-    sectionHeading('Kit list');
+    sectionHeading('Kit list', estimateTableHeight(d.kit.length));
     if (d.kit.length === 0) {
       prose('No items yet.', { color: MUTED });
     } else {
