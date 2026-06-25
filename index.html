@@ -355,7 +355,7 @@
 (function() {
   // ---- CONFIG ----
   // Bump this string each time you upload a new version, so it's visible on the page.
-  var PLANNER_VERSION = "v2.0";
+  var PLANNER_VERSION = "v2.1";
   // Replace this with your real Formspree endpoint, e.g. "https://formspree.io/f/abcd1234"
   var FORMSPREE_ENDPOINT = "https://formspree.io/f/mbdvddvk";
 
@@ -1327,21 +1327,24 @@
     if (d.groups.length === 0) {
       prose('No groups listed.', { color: MUTED });
     } else {
+      var groupTableRows = [];
       d.groups.forEach(function(g) {
-        ensureSpace(16);
-        prose(g.name, { bold: true, size: 10.5 });
+        var crossRoomNote = g.crossRoom.length > 1 ? g.crossRoom.join(' \u2194 ') : '-';
         if (g.members.length === 0) {
-          prose('  (no members assigned)', { size: 9.5, color: MUTED });
+          groupTableRows.push([g.name, '(no members assigned)', '-', crossRoomNote]);
         } else {
           g.members.forEach(function(m) {
-            prose('  ' + m.name + '  \u2014  ' + m.perm, { size: 9.5 });
+            // Repeat the group name and cross-room note on every member row so each
+            // row reads standalone, the same way the other tables in this document do.
+            groupTableRows.push([g.name, m.name, m.perm, crossRoomNote]);
           });
         }
-        if (g.crossRoom.length > 1) {
-          prose('  Cross-room talk link: ' + g.crossRoom.join(' \u2194 '), { size: 9, color: GREEN });
-        }
-        spacer(6);
       });
+      table(
+        ['Group', 'Member', 'Permission', 'Cross-room link'],
+        groupTableRows,
+        { 0: { cellWidth: 100 }, 2: { cellWidth: 90 }, 3: { cellWidth: 130 } }
+      );
     }
 
     // ---- Program audio ----
@@ -1427,11 +1430,46 @@
     var d = gatherPlanData();
     var totalWirelessPacks = d.battery.base;
     var totalAntennas = d.antenna.reduce(function(sum, p) { return sum + p.count; }, 0);
-    var kitLines = d.kit.map(function(r) { return r.code + '  ' + r.item + '  x' + r.qty; }).join('\n') || '(no items yet)';
     var notableBits = [];
     if (d.links.length > 0) notableBits.push(d.links.length + ' room-to-room link(s)');
     if (d.radio.needed) notableBits.push('radio integration (' + (d.radio.model || 'model not given') + ')');
     if (d.programAudio.needed) notableBits.push('program audio required');
+
+    // Full per-section detail, formatted as short readable lines (not a rigid
+    // table — email clients don't reliably render fixed-width text — but with
+    // every field present, so this email is complete on its own.
+    var roomsText = d.rooms.length === 0 ? '(none listed)' : d.rooms.map(function(r) {
+      return r.name + ' — ' + r.deviceCount + ' device(s), ' + r.wirelessCount + ' wireless';
+    }).join('\n');
+    var linksText = d.links.length === 0 ? 'None required' : d.links.map(function(l) {
+      return l.roomA + ' <-> ' + l.roomB + ' via ' + l.method;
+    }).join('\n');
+    var devicesText = d.devices.length === 0 ? '(none listed)' : d.devices.map(function(r) {
+      return r.name + ' — ' + r.type + ' (' + r.code + ') — room: ' + r.room + (r.spot !== '-' ? ', ' + r.spot : '');
+    }).join('\n');
+    var antennaText = d.antenna.length === 0 ? 'No wireless beltpacks assigned to rooms yet' : d.antenna.map(function(p) {
+      return p.room + ': ' + p.packCount + ' pack(s), ' + (p.roaming ? 'roaming — needs Stride' : 'no roaming — WAA fine') +
+        ' -> ' + p.count + ' x ' + p.antennaLabel + ' (' + p.antennaCode + ')';
+    }).join('\n');
+    var batteryText = d.battery.base + ' pack(s) + ' + d.battery.spares + ' spare(s) = ' + d.battery.total + ' batteries\n' +
+      '-> ' + d.battery.chargers + ' x ' + CHARGER.label + ' (' + CHARGER.code + ')\n' +
+      '-> ' + d.battery.chargers + ' x ' + CHARGER_PSU.label + ' (' + CHARGER_PSU.code + ')';
+    var usersText = d.users.length === 0 ? '(none listed)' : d.users.map(function(r) {
+      return r.name + ' — ' + r.role + ' — device: ' + r.device + ' — headset: ' + r.headset + (r.roaming !== '-' ? ' — roaming: ' + r.roaming : '');
+    }).join('\n');
+    var groupsText = d.groups.length === 0 ? '(none listed)' : d.groups.map(function(g) {
+      var memberLines = g.members.length === 0 ? '(no members assigned)' : g.members.map(function(m) { return '  ' + m.name + ' - ' + m.perm; }).join('\n');
+      var crossRoom = g.crossRoom.length > 1 ? '\n  [cross-room: ' + g.crossRoom.join(' <-> ') + ']' : '';
+      return g.name + ':\n' + memberLines + crossRoom;
+    }).join('\n');
+    var pgmText = d.programAudio.needed
+      ? 'Source: ' + (d.programAudio.source || 'not specified') + '\nRouted to: ' + (d.programAudio.groups.length > 0 ? d.programAudio.groups.join(', ') : 'not specified')
+      : 'Not required';
+    var radioText = d.radio.needed
+      ? 'Model: ' + (d.radio.model || 'not specified') + '\nSupplied by: ' + (d.radio.supplier || 'not specified') + '\nRequires: RDX Radio Interface (' + RDX_CODE + ')'
+      : 'Not required';
+    var miscText = d.misc.length === 0 ? '(none added)' : d.misc.map(function(r) { return r.item + ' (' + r.code + ') x' + r.qty; }).join('\n');
+    var kitLines = d.kit.length === 0 ? '(no items yet)' : d.kit.map(function(r) { return r.code + '  ' + r.item + '  x' + r.qty; }).join('\n');
 
     var payload = {
       subject: 'Green-GO planner: ' + (d.jobNumber !== '(not given)' ? d.jobNumber + ' — ' : '') + d.showName,
@@ -1448,8 +1486,17 @@
         d.users.length + ' user(s)  \u2022  ' +
         d.groups.length + ' group(s)',
       flags: notableBits.length > 0 ? notableBits.join(', ') : 'none',
-      kit_list: kitLines,
-      full_plan: 'Open the PDF download on the planner page for the full structured breakdown (devices, users, groups, antenna coverage, etc).'
+      rooms: roomsText,
+      room_links: linksText,
+      devices: devicesText,
+      antenna_coverage: antennaText,
+      batteries_chargers: batteryText,
+      users: usersText,
+      groups: groupsText,
+      program_audio: pgmText,
+      radio_integration: radioText,
+      misc_interfaces: miscText,
+      kit_list: kitLines
     };
 
     fetch(FORMSPREE_ENDPOINT, {
